@@ -1,8 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Header } from "@/components/Header";
-import { Search, Shield, Zap, CheckCircle, Gavel } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { Search, Shield, Zap, CheckCircle, Gavel, Scale } from "lucide-react";
 
 export default function Landing() {
   return (
@@ -27,7 +26,7 @@ export default function Landing() {
             </p>
             
             <div className="flex justify-center mb-8">
-              <Logo size="xl" showText={false} />
+              <Scale className="h-16 w-16 text-primary" />
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
@@ -93,7 +92,7 @@ export default function Landing() {
             
             <Card className="p-8 text-center border-2 hover:border-primary/30 transition-colors">
               <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary-light rounded-full flex items-center justify-center mx-auto mb-6">
-                <Logo size="md" showText={false} className="mx-auto" />
+                <Scale className="h-8 w-8 text-primary-foreground" />
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-4">Criminal Procedure Rules</h3>
               <p className="text-muted-foreground">

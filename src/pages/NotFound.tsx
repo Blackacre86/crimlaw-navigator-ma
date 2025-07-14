@@ -1,6 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
-import { Logo } from "@/components/Logo";
+import { Scale } from "lucide-react";
 
 const NotFound = () => {
   const location = useLocation();
@@ -16,7 +16,7 @@ const NotFound = () => {
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="text-center">
         <div className="flex justify-center mb-6">
-          <Logo size="lg" showText={false} />
+          <Scale className="h-12 w-12 text-primary" />
         </div>
         <h1 className="text-4xl font-bold mb-4 text-foreground">404</h1>
         <p className="text-xl text-muted-foreground mb-4">Oops! Page not found</p>

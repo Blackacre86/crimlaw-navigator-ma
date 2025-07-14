@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-import { Logo } from '@/components/Logo';
+import { Scale } from 'lucide-react';
 
 export default function Auth() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -70,7 +70,7 @@ export default function Auth() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <Logo size="lg" showText={false} />
+            <Scale className="h-12 w-12 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold">
             {isSignUp ? 'Create Account' : 'Welcome Back'}
