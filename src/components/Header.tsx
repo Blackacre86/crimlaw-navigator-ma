@@ -43,7 +43,7 @@ export function Header() {
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/auth">Log In</Link>
               </Button>
-              <Button variant="professional" size="sm" asChild>
+              <Button variant="default" size="sm" asChild>
                 <Link to="/auth">Sign Up</Link>
               </Button>
             </>

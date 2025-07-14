@@ -126,7 +126,7 @@ export default function Dashboard() {
                 </div>
                 <span className="text-xs text-muted-foreground">2 hours ago</span>
               </div>
-              <Button variant="subtle" size="sm">View Document</Button>
+              <Button variant="secondary" size="sm">View Document</Button>
             </Card>
             
             <Card className="p-6">
@@ -141,7 +141,7 @@ export default function Dashboard() {
                 </div>
                 <span className="text-xs text-muted-foreground">1 day ago</span>
               </div>
-              <Button variant="subtle" size="sm">View Document</Button>
+              <Button variant="secondary" size="sm">View Document</Button>
             </Card>
           </div>
         </div>
