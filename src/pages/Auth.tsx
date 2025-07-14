@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Scale } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { Logo } from '@/components/Logo';
 
 export default function Auth() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -70,9 +70,7 @@ export default function Auth() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="p-3 bg-gradient-to-br from-primary to-primary-light rounded-xl">
-              <Scale className="h-8 w-8 text-primary-foreground" />
-            </div>
+            <Logo size="lg" showText={false} />
           </div>
           <CardTitle className="text-2xl font-bold">
             {isSignUp ? 'Create Account' : 'Welcome Back'}

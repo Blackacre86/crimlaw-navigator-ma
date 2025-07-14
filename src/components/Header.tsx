@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
-import { Scale, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { Logo } from "@/components/Logo";
 
 export function Header() {
   const { user, profile, signOut } = useAuth();
@@ -9,14 +10,8 @@ export function Header() {
     <header className="border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <div className="p-2 bg-gradient-to-br from-primary to-primary-light rounded-lg">
-            <Scale className="h-6 w-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">MA Crim Law Navigator</h1>
-            <p className="text-xs text-muted-foreground">Legal Research Tool</p>
-          </div>
+        <Link to="/" className="hover:opacity-80 transition-opacity">
+          <Logo size="md" />
         </Link>
 
         {/* Navigation */}

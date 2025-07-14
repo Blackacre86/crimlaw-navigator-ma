@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Header } from "@/components/Header";
-import { Scale, Search, Shield, Zap, CheckCircle, Gavel } from "lucide-react";
+import { Search, Shield, Zap, CheckCircle, Gavel } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 export default function Landing() {
   return (
@@ -24,6 +25,10 @@ export default function Landing() {
               model jury instructions, and procedural rules. Built specifically for attorneys, paralegals, 
               and law enforcement professionals.
             </p>
+            
+            <div className="flex justify-center mb-8">
+              <Logo size="xl" showText={false} />
+            </div>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
               <Button variant="professional" size="lg" className="text-lg px-8 py-6">
@@ -88,7 +93,7 @@ export default function Landing() {
             
             <Card className="p-8 text-center border-2 hover:border-primary/30 transition-colors">
               <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary-light rounded-full flex items-center justify-center mx-auto mb-6">
-                <Scale className="h-8 w-8 text-primary-foreground" />
+                <Logo size="md" showText={false} className="mx-auto" />
               </div>
               <h3 className="text-xl font-semibold text-foreground mb-4">Criminal Procedure Rules</h3>
               <p className="text-muted-foreground">
