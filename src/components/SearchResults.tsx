@@ -1,10 +1,14 @@
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, BookOpen, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader2, BookOpen, AlertCircle, CheckCircle, FileText } from "lucide-react";
 
 interface SearchSource {
   title: string;
   category: string;
+  content?: string;
+  similarity?: number;
+  created_at?: string;
 }
 
 interface SearchResultsProps {
@@ -20,82 +24,110 @@ export function SearchResults({ isLoading, answer, sources, error, query }: Sear
     return null;
   }
 
-  return (
-    <section className="py-8 px-4">
-      <div className="container mx-auto max-w-4xl">
-        {isLoading && (
-          <Card className="p-8 text-center">
-            <div className="flex items-center justify-center gap-3 mb-4">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <span className="text-lg font-medium text-foreground">
-                Searching Massachusetts criminal law...
-              </span>
-            </div>
-            <p className="text-muted-foreground">
-              Analyzing your query and finding relevant legal documents
-            </p>
-          </Card>
-        )}
+  if (!query && !isLoading) return null;
 
-        {error && (
-          <Card className="p-6 border-destructive/20 bg-destructive/5">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-destructive mb-2">Search Error</h3>
-                <p className="text-muted-foreground">{error}</p>
+  if (isLoading) {
+    return (
+      <div className="w-full max-w-4xl mx-auto my-8">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center space-y-4">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                <p className="text-muted-foreground">Searching legal database...</p>
+                <p className="text-sm text-muted-foreground/70">Analyzing your query with AI</p>
               </div>
             </div>
-          </Card>
-        )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
-        {answer && !isLoading && (
-          <div className="space-y-6">
-            <Card className="p-6">
-              <div className="flex items-start gap-3 mb-4">
-                <BookOpen className="h-5 w-5 text-primary mt-0.5" />
-                <div className="flex-1">
-                  <h2 className="text-xl font-semibold text-foreground mb-2">
-                    Legal Analysis
-                  </h2>
-                  <div className="prose prose-sm max-w-none text-foreground">
-                    <div className="whitespace-pre-wrap leading-relaxed">
-                      {answer}
+  if (error) {
+    return (
+      <div className="w-full max-w-4xl mx-auto my-8">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (!answer && !sources?.length) return null;
+
+  return (
+    <div className="w-full max-w-4xl mx-auto my-8 space-y-6">
+      {/* AI Answer */}
+      {answer && (
+        <Card className="border-l-4 border-l-primary">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-primary" />
+              AI Legal Analysis
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="prose prose-sm max-w-none">
+              <p className="text-foreground leading-relaxed whitespace-pre-wrap">{answer}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Source Documents */}
+      {sources && sources.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Source Documents ({sources.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {sources.map((source, index) => (
+                <div key={index} className="border rounded-lg p-4 hover:bg-muted/50 transition-colors">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-foreground mb-2">{source.title}</h4>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="secondary">{source.category}</Badge>
+                        {source.similarity && (
+                          <Badge variant="outline">
+                            {Math.round(source.similarity * 100)}% relevant
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
+                  
+                  {source.content && (
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {source.content.substring(0, 200)}...
+                    </p>
+                  )}
+                  
+                  {source.created_at && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Added {new Date(source.created_at).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
-              </div>
-            </Card>
-
-            {sources.length > 0 && (
-              <Card className="p-6">
-                <h3 className="text-lg font-semibold text-foreground mb-4">
-                  Sources Referenced
-                </h3>
-                <div className="space-y-3">
-                  {sources.map((source, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                      <Badge variant="outline" className="shrink-0">
-                        {source.category}
-                      </Badge>
-                      <span className="text-sm font-medium text-foreground">
-                        {source.title}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            <div className="text-center">
-              <p className="text-xs text-muted-foreground">
-                This analysis is based on Massachusetts criminal law documents and should not be considered legal advice.
-                Always consult with a qualified attorney for specific legal matters.
-              </p>
+              ))}
             </div>
-          </div>
-        )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Legal Disclaimer */}
+      <div className="text-center">
+        <p className="text-xs text-muted-foreground">
+          This analysis is based on Massachusetts criminal law documents and should not be considered legal advice.
+          Always consult with a qualified attorney for specific legal matters.
+        </p>
       </div>
-    </section>
+    </div>
   );
 }

@@ -3,24 +3,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Clock, FileText, TrendingUp, Sparkles, History as HistoryIcon } from 'lucide-react';
+import { Search, Clock, FileText, TrendingUp, Sparkles, History as HistoryIcon, Loader2, Scale, BookOpen, Gavel } from 'lucide-react';
+import { SearchBar } from '@/components/SearchBar';
+import { SearchResults } from '@/components/SearchResults';
 
 export default function DashboardPage() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
+  const [searchState, setSearchState] = useState({
+    query: '',
+    isLoading: false,
+    answer: null as string | null,
+    sources: [] as any[],
+    error: null as string | null,
+  });
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-
-    setIsSearching(true);
-    // TODO: Implement search functionality
-    console.log('Searching for:', searchQuery);
-    
-    // Simulate search delay
-    setTimeout(() => {
-      setIsSearching(false);
-    }, 2000);
+  const handleSearch = (query: string, isLoading: boolean, answer: string | null, sources: any[], error: string | null) => {
+    setSearchState({ query, isLoading, answer, sources, error });
   };
 
   const recentSearches = [
@@ -49,66 +46,43 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="p-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Legal Research Dashboard</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-2">Legal Research</h1>
           <p className="text-muted-foreground">
-            Search through Massachusetts criminal law documents with AI-powered insights
+            Search Massachusetts criminal law with AI-powered insights and verifiable citations
           </p>
         </div>
       </div>
 
       <div className="p-6 space-y-8">
         {/* Search Section */}
-        <div className="max-w-4xl mx-auto">
-          <form onSubmit={handleSearch} className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Ask anything about Massachusetts criminal law..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 text-lg h-14 text-foreground placeholder:text-muted-foreground"
-                disabled={isSearching}
-              />
-            </div>
-            <div className="flex justify-center">
-              <Button
-                type="submit"
-                size="lg"
-                disabled={isSearching || !searchQuery.trim()}
-                className="px-8"
-              >
-                {isSearching ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2"></div>
-                    Searching...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Search with AI
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-
+        <div className="max-w-4xl mx-auto space-y-6">
+          <SearchBar onSearch={handleSearch} />
+          
           {/* Search Tips */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground">
-            <div className="text-center">
-              <div className="font-medium text-foreground mb-1">Natural Language</div>
-              <div>"What are the penalties for first-time DUI in Massachusetts?"</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+            <div className="text-center p-4 bg-muted/30 rounded-lg">
+              <div className="font-medium text-foreground mb-2">Natural Language</div>
+              <div className="text-muted-foreground">"What are the penalties for first-time DUI in Massachusetts?"</div>
             </div>
-            <div className="text-center">
-              <div className="font-medium text-foreground mb-1">Case Law</div>
-              <div>"Recent Massachusetts Supreme Court decisions on search warrants"</div>
+            <div className="text-center p-4 bg-muted/30 rounded-lg">
+              <div className="font-medium text-foreground mb-2">Case Law</div>
+              <div className="text-muted-foreground">"Recent Supreme Judicial Court decisions on search warrants"</div>
             </div>
-            <div className="text-center">
-              <div className="font-medium text-foreground mb-1">Statutes</div>
-              <div>"Massachusetts General Laws Chapter 265 assault provisions"</div>
+            <div className="text-center p-4 bg-muted/30 rounded-lg">
+              <div className="font-medium text-foreground mb-2">Statutes</div>
+              <div className="text-muted-foreground">"Massachusetts General Laws Chapter 265 assault provisions"</div>
             </div>
           </div>
         </div>
+
+        {/* Search Results */}
+        <SearchResults 
+          isLoading={searchState.isLoading}
+          answer={searchState.answer}
+          sources={searchState.sources}
+          error={searchState.error}
+          query={searchState.query}
+        />
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

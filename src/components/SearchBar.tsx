@@ -77,7 +77,6 @@ export function SearchBar({ onSearch }: SearchBarProps) {
           <div className="absolute inset-y-0 right-0 pr-2 flex items-center">
             <Button 
               type="submit" 
-              variant="professional" 
               size="sm" 
               className="h-10"
               disabled={isLoading || !query.trim()}

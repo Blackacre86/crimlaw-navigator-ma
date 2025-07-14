@@ -24,7 +24,7 @@ export function Header() {
           {user ? (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link to="/dashboard">Dashboard</Link>
+                <Link to="/app">Dashboard</Link>
               </Button>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/profile">Profile</Link>
@@ -41,10 +41,10 @@ export function Header() {
           ) : (
             <>
               <Button variant="ghost" size="sm" asChild>
-                <Link to="/auth">Log In</Link>
+                <Link to="/login">Log In</Link>
               </Button>
               <Button variant="default" size="sm" asChild>
-                <Link to="/auth">Sign Up</Link>
+                <Link to="/signup">Sign Up</Link>
               </Button>
             </>
           )}

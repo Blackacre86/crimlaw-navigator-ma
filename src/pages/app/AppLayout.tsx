@@ -58,36 +58,9 @@ export default function AppLayout() {
               }
             >
               <Search className="h-5 w-5" />
-              {!sidebarCollapsed && <span>Search</span>}
+              {!sidebarCollapsed && <span>Legal Research</span>}
             </NavLink>
 
-            <NavLink
-              to="/app/documents"
-              className={({ isActive }) =>
-                `flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                }`
-              }
-            >
-              <FileText className="h-5 w-5" />
-              {!sidebarCollapsed && <span>Documents</span>}
-            </NavLink>
-
-            <NavLink
-              to="/app/history"
-              className={({ isActive }) =>
-                `flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                }`
-              }
-            >
-              <History className="h-5 w-5" />
-              {!sidebarCollapsed && <span>History</span>}
-            </NavLink>
 
             <NavLink
               to="/app/profile"
@@ -103,20 +76,43 @@ export default function AppLayout() {
               {!sidebarCollapsed && <span>Profile</span>}
             </NavLink>
 
-            {isAdmin && (
+            {isAdmin && !sidebarCollapsed && (
+              <div className="mt-4 pt-4 border-t border-sidebar-border">
+                <div className="px-3 pb-2">
+                  <span className="text-xs font-medium text-sidebar-foreground/60 uppercase tracking-wide">
+                    Admin
+                  </span>
+                </div>
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) =>
+                    `flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    }`
+                  }
+                >
+                  <Settings className="h-5 w-5" />
+                  <span>Document Management</span>
+                  <Badge variant="secondary" className="ml-auto text-xs">Admin</Badge>
+                </NavLink>
+              </div>
+            )}
+            
+            {isAdmin && sidebarCollapsed && (
               <NavLink
                 to="/admin"
                 className={({ isActive }) =>
-                  `flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                  `flex items-center justify-center px-3 py-2 rounded-lg transition-colors ${
                     isActive
                       ? 'bg-sidebar-accent text-sidebar-accent-foreground'
                       : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                   }`
                 }
+                title="Admin Dashboard"
               >
                 <Settings className="h-5 w-5" />
-                {!sidebarCollapsed && <span>Admin Dashboard</span>}
-                {!sidebarCollapsed && <Badge variant="secondary" className="text-xs">Admin</Badge>}
               </NavLink>
             )}
           </div>
