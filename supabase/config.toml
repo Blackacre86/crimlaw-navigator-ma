@@ -27,4 +27,4 @@ file_size_limit = "50MiB"
 verify_jwt = false
 
 [functions.document-processor]
-verify_jwt = true
+verify_jwt = false
