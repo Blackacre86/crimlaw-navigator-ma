@@ -13,24 +13,44 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+  let currentStep = 'initialization';
+
   try {
+    console.log('🚀 Document processor started');
+    
     const { fileName, originalName } = await req.json();
     
     if (!fileName || !originalName) {
       throw new Error('Missing required parameters: fileName and originalName');
     }
 
-    console.log(`Processing document: ${originalName}`);
+    console.log(`📄 Processing document: ${originalName} (internal: ${fileName})`);
 
     // Initialize Supabase client with service role key
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!;
+    currentStep = 'environment_check';
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
     const llamaParseApiKey = Deno.env.get('LLAMA_CLOUD_API_KEY');
+    const ocrSpaceApiKey = Deno.env.get('OCR_SPACE_API_KEY');
+
+    console.log('🔍 Environment check:');
+    console.log(`- SUPABASE_URL: ${supabaseUrl ? '✅ Set' : '❌ Missing'}`);
+    console.log(`- SUPABASE_SERVICE_ROLE_KEY: ${supabaseServiceKey ? '✅ Set' : '❌ Missing'}`);
+    console.log(`- OPENAI_API_KEY: ${openaiApiKey ? '✅ Set' : '❌ Missing'}`);
+    console.log(`- LLAMA_CLOUD_API_KEY: ${llamaParseApiKey ? '✅ Set' : '❌ Missing'}`);
+    console.log(`- OCR_SPACE_API_KEY: ${ocrSpaceApiKey ? '✅ Set' : '❌ Missing'}`);
+
+    if (!supabaseUrl || !supabaseServiceKey || !openaiApiKey) {
+      throw new Error('Missing critical environment variables. Check Supabase secrets configuration.');
+    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Download the file from storage
+    currentStep = 'file_download';
+    console.log('📥 Downloading file from storage...');
     const { data: fileData, error: downloadError } = await supabase.storage
       .from('documents')
       .download(fileName);
@@ -39,139 +59,226 @@ serve(async (req) => {
       throw new Error(`Failed to download file: ${downloadError.message}`);
     }
 
-    console.log('File downloaded, processing PDF...');
-
-    let text = '';
     const arrayBuffer = await fileData.arrayBuffer();
+    const fileSizeKB = arrayBuffer.byteLength / 1024;
+    console.log(`📊 File downloaded: ${fileSizeKB.toFixed(1)} KB`);
+
+    // Text extraction with fallback chain
+    currentStep = 'text_extraction';
+    let text = '';
+    let extractionMethod = 'none';
 
     // Try LlamaParse first if API key is available
     if (llamaParseApiKey) {
       try {
-        console.log('Using LlamaParse for PDF extraction...');
+        console.log('🔄 Attempting LlamaParse extraction...');
         text = await extractWithLlamaParse(arrayBuffer, llamaParseApiKey, originalName);
-        console.log(`LlamaParse extracted ${text.length} characters`);
+        extractionMethod = 'llamaparse';
+        console.log(`✅ LlamaParse extracted ${text.length} characters`);
       } catch (error) {
-        console.warn('LlamaParse failed, falling back to basic extraction:', error);
+        console.warn('❌ LlamaParse failed:', error.message);
+        console.log('🔄 Falling back to basic extraction...');
         text = await extractPdfBasic(arrayBuffer);
+        extractionMethod = 'basic';
       }
     } else {
-      console.log('LlamaParse API key not found, using basic extraction...');
+      console.log('⚠️ LlamaParse API key not found, using basic extraction...');
       text = await extractPdfBasic(arrayBuffer);
+      extractionMethod = 'basic';
     }
 
     // Check if we might need OCR (scanned document detection)
-    const fileSizeKB = arrayBuffer.byteLength / 1024;
+    const textToSizeRatio = text.length / fileSizeKB;
+    console.log(`📈 Text extraction stats: ${text.length} chars, ratio: ${textToSizeRatio.toFixed(2)} chars/KB`);
+    
     if (text.length < 500 && fileSizeKB > 100) {
-      console.log('Potential scanned document detected (low text/size ratio). Attempting OCR...');
+      console.log('🔍 Potential scanned document detected (low text/size ratio). Attempting OCR...');
       
-      const ocrSpaceApiKey = Deno.env.get('OCR_SPACE_API_KEY');
       if (ocrSpaceApiKey) {
         try {
+          console.log('🔄 Starting OCR extraction...');
           const ocrText = await extractWithOCR(arrayBuffer, ocrSpaceApiKey, originalName);
           if (ocrText && ocrText.length > text.length) {
-            console.log(`OCR extracted ${ocrText.length} characters, using OCR result`);
+            console.log(`✅ OCR extracted ${ocrText.length} characters (better than ${extractionMethod})`);
             text = ocrText;
+            extractionMethod = 'ocr';
+          } else {
+            console.log(`⚠️ OCR result (${ocrText?.length || 0} chars) not better than ${extractionMethod}`);
           }
         } catch (error) {
-          console.warn('OCR extraction failed:', error);
+          console.warn('❌ OCR extraction failed:', error.message);
         }
       } else {
-        console.warn('OCR_SPACE_API_KEY not found, skipping OCR fallback');
+        console.warn('⚠️ OCR_SPACE_API_KEY not found, skipping OCR fallback');
       }
     }
 
     if (!text || text.length < 100) {
-      throw new Error('Could not extract meaningful text from PDF');
+      throw new Error(`Could not extract meaningful text from PDF. Extracted only ${text?.length || 0} characters using ${extractionMethod}.`);
     }
 
-    console.log(`Extracted text length: ${text.length} characters`);
+    console.log(`✅ Final extraction result: ${text.length} characters using ${extractionMethod}`);
 
     // Use structure-aware chunking with RecursiveCharacterTextSplitter approach
+    currentStep = 'chunking';
+    console.log('📝 Creating text chunks...');
     const chunks = structureAwareChunking(text, 1024, 200);
-    console.log(`Created ${chunks.length} text chunks`);
+    console.log(`✅ Created ${chunks.length} text chunks`);
+
+    if (chunks.length === 0) {
+      throw new Error('No valid chunks created from extracted text');
+    }
 
     // Generate embeddings for each chunk and insert into database
+    currentStep = 'embedding_generation';
     let processedChunks = 0;
-    const batchSize = 5; // Process 5 chunks at a time to avoid rate limits
+    const batchSize = 3; // Reduced batch size for better stability
+    const totalBatches = Math.ceil(chunks.length / batchSize);
+
+    console.log(`🔄 Processing ${chunks.length} chunks in ${totalBatches} batches...`);
 
     for (let i = 0; i < chunks.length; i += batchSize) {
+      const currentBatch = Math.floor(i / batchSize) + 1;
       const batch = chunks.slice(i, i + batchSize);
       
-      await Promise.all(
-        batch.map(async (chunk, batchIndex) => {
-          try {
-            // Generate embedding for this chunk
-            const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${openaiApiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'text-embedding-3-small',
-                input: chunk.content,
-                encoding_format: 'float',
-              }),
-            });
-
-            if (!embeddingResponse.ok) {
-              throw new Error(`OpenAI API error: ${embeddingResponse.statusText}`);
-            }
-
-            const embeddingData = await embeddingResponse.json();
-            const embedding = embeddingData.data[0].embedding;
-
-            // Insert chunk into database with metadata
+      console.log(`📦 Processing batch ${currentBatch}/${totalBatches} (chunks ${i + 1}-${Math.min(i + batchSize, chunks.length)})`);
+      
+      try {
+        await Promise.all(
+          batch.map(async (chunk, batchIndex) => {
             const chunkIndex = i + batchIndex + 1;
-            const { error: insertError } = await supabase
-              .from('documents')
-              .insert({
-                title: chunk.title,
-                content: chunk.content,
-                category: determineCategory(originalName, chunk.metadata),
-                embedding: JSON.stringify(embedding),
+            
+            try {
+              // Generate embedding for this chunk with timeout
+              const embeddingController = new AbortController();
+              const embeddingTimeout = setTimeout(() => embeddingController.abort(), 30000); // 30 second timeout
+              
+              const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${openaiApiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'text-embedding-3-small',
+                  input: chunk.content,
+                  encoding_format: 'float',
+                }),
+                signal: embeddingController.signal,
               });
 
-            if (insertError) {
-              console.error(`Error inserting chunk ${chunkIndex}:`, insertError);
-              throw insertError;
+              clearTimeout(embeddingTimeout);
+
+              if (!embeddingResponse.ok) {
+                const errorText = await embeddingResponse.text();
+                throw new Error(`OpenAI API error ${embeddingResponse.status}: ${errorText}`);
+              }
+
+              const embeddingData = await embeddingResponse.json();
+              if (!embeddingData.data || !embeddingData.data[0] || !embeddingData.data[0].embedding) {
+                throw new Error('Invalid embedding response from OpenAI');
+              }
+              
+              const embedding = embeddingData.data[0].embedding;
+
+              // Insert chunk into database with retry logic
+              let insertSuccess = false;
+              let insertAttempts = 0;
+              const maxInsertAttempts = 3;
+              
+              while (!insertSuccess && insertAttempts < maxInsertAttempts) {
+                try {
+                  const { error: insertError } = await supabase
+                    .from('documents')
+                    .insert({
+                      title: chunk.title,
+                      content: chunk.content,
+                      category: determineCategory(originalName, chunk.metadata),
+                      embedding: JSON.stringify(embedding),
+                    });
+
+                  if (insertError) {
+                    throw insertError;
+                  }
+                  
+                  insertSuccess = true;
+                  processedChunks++;
+                  console.log(`✅ Processed chunk ${chunkIndex}/${chunks.length}`);
+                } catch (insertError) {
+                  insertAttempts++;
+                  console.warn(`⚠️ Insert attempt ${insertAttempts} failed for chunk ${chunkIndex}:`, insertError.message);
+                  
+                  if (insertAttempts >= maxInsertAttempts) {
+                    throw new Error(`Failed to insert chunk ${chunkIndex} after ${maxInsertAttempts} attempts: ${insertError.message}`);
+                  }
+                  
+                  // Wait before retry
+                  await new Promise(resolve => setTimeout(resolve, 1000 * insertAttempts));
+                }
+              }
+              
+            } catch (error) {
+              console.error(`❌ Error processing chunk ${chunkIndex}:`, error.message);
+              throw new Error(`Chunk ${chunkIndex} processing failed: ${error.message}`);
             }
+          })
+        );
 
-            processedChunks++;
-            console.log(`Processed chunk ${chunkIndex}/${chunks.length}`);
-          } catch (error) {
-            console.error(`Error processing chunk ${i + batchIndex + 1}:`, error);
-            throw error;
-          }
-        })
-      );
-
-      // Small delay between batches to respect rate limits
-      if (i + batchSize < chunks.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Progress update
+        const progress = Math.round((processedChunks / chunks.length) * 100);
+        console.log(`📊 Progress: ${processedChunks}/${chunks.length} chunks (${progress}%)`);
+        
+        // Delay between batches to respect rate limits
+        if (i + batchSize < chunks.length) {
+          console.log('⏳ Waiting 2 seconds before next batch...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+      } catch (batchError) {
+        console.error(`❌ Batch ${currentBatch} failed:`, batchError.message);
+        throw new Error(`Processing failed at batch ${currentBatch}: ${batchError.message}`);
       }
     }
 
     // Clean up - delete the uploaded file from storage
-    await supabase.storage.from('documents').remove([fileName]);
+    currentStep = 'cleanup';
+    console.log('🧹 Cleaning up uploaded file...');
+    try {
+      await supabase.storage.from('documents').remove([fileName]);
+      console.log('✅ File cleanup completed');
+    } catch (cleanupError) {
+      console.warn('⚠️ File cleanup failed (non-critical):', cleanupError.message);
+    }
 
-    console.log(`Successfully processed ${processedChunks} chunks from ${originalName}`);
+    const processingTime = (Date.now() - startTime) / 1000;
+    console.log(`🎉 Successfully processed ${processedChunks} chunks from ${originalName} in ${processingTime.toFixed(1)}s`);
 
     return new Response(
       JSON.stringify({
         success: true,
         chunksCreated: processedChunks,
         originalName,
+        extractionMethod,
+        processingTimeSeconds: processingTime,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Error in document-processor function:', error);
+    const processingTime = (Date.now() - startTime) / 1000;
+    console.error(`💥 Error in document-processor function at step '${currentStep}':`, error.message);
+    console.error('📊 Processing stats:', {
+      step: currentStep,
+      timeElapsed: `${processingTime.toFixed(1)}s`,
+      error: error.message
+    });
+    
     return new Response(
       JSON.stringify({
         error: error.message,
         success: false,
+        failedAtStep: currentStep,
+        processingTimeSeconds: processingTime,
       }),
       {
         status: 500,
@@ -203,9 +310,9 @@ async function extractWithLlamaParse(arrayBuffer: ArrayBuffer, apiKey: string, f
   const result = await response.json();
   const jobId = result.id;
 
-  // Poll for completion
+  // Poll for completion (reduced timeout for better stability)
   let attempts = 0;
-  const maxAttempts = 30; // 5 minutes max
+  const maxAttempts = 12; // 2 minutes max (12 * 10s)
   
   while (attempts < maxAttempts) {
     await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
