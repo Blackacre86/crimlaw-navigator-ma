@@ -9,6 +9,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Step 2: Add debug logging to confirm function invocation
+  console.log(`[${new Date().toISOString()}] document-processor function invoked.`);
+
   try {
     console.log('🚀 Document processor request received');
     
