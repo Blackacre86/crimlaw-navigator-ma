@@ -56,7 +56,7 @@ export default function Admin() {
       }
 
       setProgress(50);
-      setStatus('Processing document and generating embeddings...');
+      setStatus('Document processing started in background. Check the processing status below.');
 
       // Call document processor edge function
       const { data, error } = await supabase.functions.invoke('document-processor', {
@@ -71,11 +71,11 @@ export default function Admin() {
       }
 
       setProgress(100);
-      setStatus(`Processing complete! ${data.chunksCreated} chunks added to database.`);
+      setStatus(`Processing started! Status: ${data.status}. Monitor progress below.`);
       
       toast({
-        title: "Document processed successfully",
-        description: `${data.chunksCreated} text chunks have been added to the database.`,
+        title: "Document processing started",
+        description: "The document is being processed in the background. You can monitor progress below.",
       });
 
       // Reset form
@@ -210,7 +210,56 @@ export default function Admin() {
               </div>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                System Test
+              </CardTitle>
+              <CardDescription>
+                Test Edge Function connectivity and configuration
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button 
+                onClick={async () => {
+                  try {
+                    setStatus('Testing Edge Function connectivity...');
+                    const { data, error } = await supabase.functions.invoke('test-function', {
+                      body: { test: true, timestamp: new Date().toISOString() }
+                    });
+                    
+                    if (error) {
+                      setStatus(`❌ Test failed: ${error.message}`);
+                      toast({
+                        title: "Test failed",
+                        description: error.message,
+                        variant: "destructive",
+                      });
+                    } else {
+                      setStatus(`✅ Test successful! Function responded at ${data.timestamp}`);
+                      toast({
+                        title: "Test successful",
+                        description: "Edge Functions are working correctly",
+                      });
+                    }
+                  } catch (error: any) {
+                    setStatus(`❌ Test error: ${error.message}`);
+                    toast({
+                      title: "Test error",
+                      description: error.message,
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                variant="outline"
+              >
+                Test Edge Functions
+              </Button>
+            </CardContent>
+          </Card>
 
         <Card className="mb-6">
           <CardHeader>

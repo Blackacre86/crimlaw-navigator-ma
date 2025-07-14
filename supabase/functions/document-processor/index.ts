@@ -9,40 +9,109 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const startTime = Date.now();
-  let currentStep = 'initialization';
-
   try {
-    console.log('🚀 Document processor started');
+    console.log('🚀 Document processor request received');
     
     const { fileName, originalName } = await req.json();
     
     if (!fileName || !originalName) {
-      throw new Error('Missing required parameters: fileName and originalName');
+      return new Response(
+        JSON.stringify({ error: 'Missing required parameters: fileName and originalName' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    console.log(`📄 Processing document: ${originalName} (internal: ${fileName})`);
+    console.log(`📄 Document processing request: ${originalName} (internal: ${fileName})`);
 
-    // Initialize Supabase client with service role key
-    currentStep = 'environment_check';
+    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(
+        JSON.stringify({ error: 'Missing Supabase configuration' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Start background processing using EdgeRuntime.waitUntil
+    EdgeRuntime.waitUntil(
+      processDocumentInBackground(fileName, originalName, supabase)
+    );
+
+    // Return immediate response
+    console.log('✅ Document processing started in background');
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Document processing started in background',
+        fileName,
+        originalName,
+        status: 'queued'
+      }),
+      { 
+        status: 202, // Accepted - processing in background
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+
+  } catch (error) {
+    console.error('❌ Document processor request error:', error);
+    return new Response(
+      JSON.stringify({
+        error: error.message,
+        success: false
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+});
+
+// Background processing function
+async function processDocumentInBackground(
+  fileName: string, 
+  originalName: string, 
+  supabase: any
+) {
+  const startTime = Date.now();
+  let currentStep = 'initialization';
+  let jobId: string | null = null;
+
+  try {
+    console.log(`🔄 Background processing started for: ${originalName}`);
+    
+    // Create processing job record
+    const { data: jobData, error: jobError } = await supabase
+      .from('processing_jobs')
+      .insert({
+        document_name: fileName,
+        original_name: originalName,
+        status: 'processing'
+      })
+      .select()
+      .single();
+
+    if (jobError) {
+      console.error('❌ Failed to create processing job:', jobError);
+      return;
+    }
+
+    jobId = jobData.id;
+    console.log(`📝 Created processing job: ${jobId}`);
+
+    // Get environment variables
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
     const llamaParseApiKey = Deno.env.get('LLAMA_CLOUD_API_KEY');
     const ocrSpaceApiKey = Deno.env.get('OCR_SPACE_API_KEY');
 
-    console.log('🔍 Environment check:');
-    console.log(`- SUPABASE_URL: ${supabaseUrl ? '✅ Set' : '❌ Missing'}`);
-    console.log(`- SUPABASE_SERVICE_ROLE_KEY: ${supabaseServiceKey ? '✅ Set' : '❌ Missing'}`);
-    console.log(`- OPENAI_API_KEY: ${openaiApiKey ? '✅ Set' : '❌ Missing'}`);
-    console.log(`- LLAMA_CLOUD_API_KEY: ${llamaParseApiKey ? '✅ Set' : '❌ Missing'}`);
-    console.log(`- OCR_SPACE_API_KEY: ${ocrSpaceApiKey ? '✅ Set' : '❌ Missing'}`);
-
-    if (!supabaseUrl || !supabaseServiceKey || !openaiApiKey) {
-      throw new Error('Missing critical environment variables. Check Supabase secrets configuration.');
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API key not configured');
     }
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Download the file from storage
     currentStep = 'file_download';
@@ -124,6 +193,15 @@ serve(async (req) => {
     if (chunks.length === 0) {
       throw new Error('No valid chunks created from extracted text');
     }
+
+    // Update processing job record with chunks info
+    await supabase
+      .from('processing_jobs')
+      .update({
+        total_chunks: chunks.length,
+        processing_method: extractionMethod
+      })
+      .eq('id', jobId);
 
     // Generate embeddings for each chunk and insert into database
     currentStep = 'embedding_generation';
@@ -220,9 +298,17 @@ serve(async (req) => {
           })
         );
 
-        // Progress update
+        // Progress update and job status update
         const progress = Math.round((processedChunks / chunks.length) * 100);
         console.log(`📊 Progress: ${processedChunks}/${chunks.length} chunks (${progress}%)`);
+        
+        // Update job progress
+        if (jobId) {
+          await supabase
+            .from('processing_jobs')
+            .update({ chunks_processed: processedChunks })
+            .eq('id', jobId);
+        }
         
         // Delay between batches to respect rate limits
         if (i + batchSize < chunks.length) {
@@ -249,40 +335,44 @@ serve(async (req) => {
     const processingTime = (Date.now() - startTime) / 1000;
     console.log(`🎉 Successfully processed ${processedChunks} chunks from ${originalName} in ${processingTime.toFixed(1)}s`);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        chunksCreated: processedChunks,
-        originalName,
-        extractionMethod,
-        processingTimeSeconds: processingTime,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    // Mark job as completed
+    if (jobId) {
+      await supabase
+        .from('processing_jobs')
+        .update({
+          status: 'completed',
+          chunks_processed: processedChunks,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+    }
+
+    console.log(`✅ Processing job ${jobId} completed successfully`);
 
   } catch (error) {
     const processingTime = (Date.now() - startTime) / 1000;
-    console.error(`💥 Error in document-processor function at step '${currentStep}':`, error.message);
+    console.error(`💥 Background processing error at step '${currentStep}':`, error.message);
     console.error('📊 Processing stats:', {
       step: currentStep,
       timeElapsed: `${processingTime.toFixed(1)}s`,
       error: error.message
     });
     
-    return new Response(
-      JSON.stringify({
-        error: error.message,
-        success: false,
-        failedAtStep: currentStep,
-        processingTimeSeconds: processingTime,
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+    // Mark job as failed
+    if (jobId) {
+      await supabase
+        .from('processing_jobs')
+        .update({
+          status: 'failed',
+          error_message: error.message,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', jobId);
+    }
+    
+    console.error(`❌ Processing job ${jobId} failed: ${error.message}`);
   }
-});
+}
 
 async function extractWithLlamaParse(arrayBuffer: ArrayBuffer, apiKey: string, fileName: string): Promise<string> {
   const formData = new FormData();
@@ -495,33 +585,35 @@ function recursiveTextSplit(text: string, separators: string[], chunkSize: numbe
     return [text];
   }
 
-  const [separator, ...remainingSeparators] = separators;
+  const [separator, ...restSeparators] = separators;
   const splits = text.split(separator);
   
   if (splits.length === 1) {
-    // Separator not found, try next separator
-    return recursiveTextSplit(text, remainingSeparators, chunkSize, overlap);
+    // No split found, try next separator
+    return recursiveTextSplit(text, restSeparators, chunkSize, overlap);
   }
 
   const chunks: string[] = [];
   let currentChunk = '';
 
   for (let i = 0; i < splits.length; i++) {
-    const split = splits[i];
-    const potentialChunk = currentChunk + (currentChunk ? separator : '') + split;
-
-    if (potentialChunk.length <= chunkSize) {
-      currentChunk = potentialChunk;
+    const split = i === 0 ? splits[i] : separator + splits[i];
+    
+    if (currentChunk.length + split.length <= chunkSize) {
+      currentChunk += split;
     } else {
       if (currentChunk) {
         chunks.push(currentChunk);
         
         // Handle overlap
-        const overlapText = currentChunk.slice(-overlap);
-        currentChunk = overlapText + separator + split;
+        if (overlap > 0 && currentChunk.length > overlap) {
+          currentChunk = currentChunk.slice(-overlap) + split;
+        } else {
+          currentChunk = split;
+        }
       } else {
-        // Single split is too large, recursively split it
-        const subChunks = recursiveTextSplit(split, remainingSeparators, chunkSize, overlap);
+        // Split is too large, recursively split it
+        const subChunks = recursiveTextSplit(split, restSeparators, chunkSize, overlap);
         chunks.push(...subChunks);
       }
     }
@@ -531,27 +623,23 @@ function recursiveTextSplit(text: string, separators: string[], chunkSize: numbe
     chunks.push(currentChunk);
   }
 
-  return chunks;
+  return chunks.filter(chunk => chunk.trim().length > 0);
 }
 
 function determineCategory(fileName: string, metadata: Record<string, any>): string {
   const lowerFileName = fileName.toLowerCase();
   
-  if (lowerFileName.includes('jury') || lowerFileName.includes('instruction')) {
-    return 'Model Jury Instructions';
-  } else if (lowerFileName.includes('criminal') && lowerFileName.includes('procedure')) {
-    return 'Rules of Criminal Procedure';
-  } else if (lowerFileName.includes('general') && lowerFileName.includes('law')) {
-    return 'MA General Laws';
+  if (lowerFileName.includes('statute') || lowerFileName.includes('mgl')) {
+    return 'statute';
+  } else if (lowerFileName.includes('case') || lowerFileName.includes('decision')) {
+    return 'case_law';
+  } else if (lowerFileName.includes('rule') || lowerFileName.includes('procedure')) {
+    return 'procedural_rule';
+  } else if (lowerFileName.includes('regulation') || lowerFileName.includes('cmr')) {
+    return 'regulation';
+  } else if (metadata.section && metadata.section.includes('Rule')) {
+    return 'procedural_rule';
+  } else {
+    return 'general';
   }
-  
-  // Try to determine from content
-  const section = metadata.section?.toLowerCase() || '';
-  if (section.includes('rule') || section.includes('procedure')) {
-    return 'Rules of Criminal Procedure';
-  } else if (section.includes('chapter') || section.includes('section')) {
-    return 'MA General Laws';
-  }
-  
-  return 'Legal Document';
 }

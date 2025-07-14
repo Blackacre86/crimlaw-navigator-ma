@@ -47,6 +47,51 @@ export type Database = {
         }
         Relationships: []
       }
+      processing_jobs: {
+        Row: {
+          chunks_processed: number | null
+          completed_at: string | null
+          created_at: string
+          document_name: string
+          error_message: string | null
+          id: string
+          original_name: string
+          processing_method: string | null
+          started_at: string | null
+          status: string
+          total_chunks: number | null
+          updated_at: string
+        }
+        Insert: {
+          chunks_processed?: number | null
+          completed_at?: string | null
+          created_at?: string
+          document_name: string
+          error_message?: string | null
+          id?: string
+          original_name: string
+          processing_method?: string | null
+          started_at?: string | null
+          status?: string
+          total_chunks?: number | null
+          updated_at?: string
+        }
+        Update: {
+          chunks_processed?: number | null
+          completed_at?: string | null
+          created_at?: string
+          document_name?: string
+          error_message?: string | null
+          id?: string
+          original_name?: string
+          processing_method?: string | null
+          started_at?: string | null
+          status?: string
+          total_chunks?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

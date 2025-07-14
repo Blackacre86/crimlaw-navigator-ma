@@ -28,3 +28,6 @@ verify_jwt = false
 
 [functions.document-processor]
 verify_jwt = false
+
+[functions.test-function]
+verify_jwt = false
