@@ -128,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!error) {
       // Force page reload for clean state
-      window.location.href = '/dashboard';
+      window.location.href = '/app';
     }
 
     return { error };

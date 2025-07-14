@@ -9,6 +9,9 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Public pages
 import LandingPage from "./pages/public/LandingPage";
+import PricingPage from "./pages/public/PricingPage";
+import TermsOfServicePage from "./pages/public/TermsOfServicePage";
+import PrivacyPolicyPage from "./pages/public/PrivacyPolicyPage";
 
 // Auth pages
 import LoginPage from "./pages/auth/LoginPage";
@@ -34,6 +37,9 @@ const App = () => (
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<LandingPage />} />
+              <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/terms-of-service" element={<TermsOfServicePage />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
               
               {/* Auth Routes */}
               <Route path="/login" element={<LoginPage />} />

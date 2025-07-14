@@ -31,15 +31,17 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="py-20 px-4">
         <div className="container mx-auto text-center max-w-4xl">
-          <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
+          <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight animate-fade-in-up">
             The AI-Powered Legal Co-Pilot for Massachusetts Criminal Law
           </h1>
-          <p className="text-xl md:text-2xl mb-8 text-primary-foreground/90 leading-relaxed">
+          <p className="text-xl md:text-2xl mb-8 text-primary-foreground/90 leading-relaxed animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
             Get faster, more accurate answers with verifiable citations. Transform your legal research from hours into minutes.
           </p>
-          <Button size="lg" className="bg-accent-blue hover:bg-accent-blue/90 text-accent-blue-foreground px-8 py-4 text-lg">
-            <Link to="/signup">Start Free Trial</Link>
-          </Button>
+          <div className="animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+            <Button size="lg" className="bg-accent-blue hover:bg-accent-blue/90 text-accent-blue-foreground px-8 py-4 text-lg hover:scale-105 transition-all duration-300">
+              <Link to="/signup">Start Free Trial</Link>
+            </Button>
+          </div>
           
           {/* Trust Bar */}
           <div className="mt-16 pt-8 border-t border-primary-foreground/10">
@@ -64,7 +66,7 @@ export default function LandingPage() {
           </div>
           
           <div className="grid md:grid-cols-3 gap-8">
-            <Card className="text-center">
+            <Card className="text-center hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-fade-in" style={{ animationDelay: '0.1s' }}>
               <CardHeader>
                 <Search className="h-12 w-12 text-primary mx-auto mb-4" />
                 <CardTitle>Intelligent Search</CardTitle>
@@ -76,7 +78,7 @@ export default function LandingPage() {
               </CardContent>
             </Card>
             
-            <Card className="text-center">
+            <Card className="text-center hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-fade-in" style={{ animationDelay: '0.2s' }}>
               <CardHeader>
                 <FileText className="h-12 w-12 text-primary mx-auto mb-4" />
                 <CardTitle>Automated Document Analysis</CardTitle>
@@ -88,7 +90,7 @@ export default function LandingPage() {
               </CardContent>
             </Card>
             
-            <Card className="text-center">
+            <Card className="text-center hover:shadow-lg transition-all duration-300 hover:-translate-y-1 animate-fade-in" style={{ animationDelay: '0.3s' }}>
               <CardHeader>
                 <BarChart3 className="h-12 w-12 text-primary mx-auto mb-4" />
                 <CardTitle>Real-time Monitoring</CardTitle>

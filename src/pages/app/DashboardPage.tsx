@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Clock, FileText, TrendingUp, Sparkles, History as HistoryIcon, Loader2, Scale, BookOpen, Gavel } from 'lucide-react';
 import { SearchBar } from '@/components/SearchBar';
 import { SearchResults } from '@/components/SearchResults';
+import { OnboardingWelcome } from '@/components/OnboardingWelcome';
 
 export default function DashboardPage() {
   const [searchState, setSearchState] = useState({
@@ -43,6 +44,8 @@ export default function DashboardPage() {
 
   return (
     <div className="h-full bg-background">
+      <OnboardingWelcome />
+      
       {/* Header */}
       <div className="border-b border-border bg-card">
         <div className="p-6">
