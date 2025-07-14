@@ -5,11 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User, Mail, Phone, MapPin, Building, Calendar } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Profile() {
+  const { profile, user } = useAuth();
+
   return (
     <div className="min-h-screen bg-background">
-      <Header isAuthenticated={true} />
+      <Header />
       
       <div className="container mx-auto px-4 py-12">
         <div className="max-w-4xl mx-auto">
@@ -19,17 +22,21 @@ export default function Profile() {
               <Avatar className="w-24 h-24">
                 <AvatarImage src="" alt="Profile" />
                 <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                  JD
+                  {profile?.full_name?.split(' ').map(n => n[0]).join('') || user?.email?.[0].toUpperCase() || 'U'}
                 </AvatarFallback>
               </Avatar>
               
               <div className="text-center md:text-left flex-1">
-                <h1 className="text-3xl font-bold text-foreground mb-2">John Doe</h1>
-                <p className="text-lg text-muted-foreground mb-4">Criminal Defense Attorney</p>
+                <h1 className="text-3xl font-bold text-foreground mb-2">
+                  {profile?.full_name || user?.email || 'User'}
+                </h1>
+                <p className="text-lg text-muted-foreground mb-4">
+                  {profile?.role === 'admin' ? 'Administrator' : 'Legal Professional'}
+                </p>
                 <div className="flex flex-wrap justify-center md:justify-start gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
                     <Mail className="h-4 w-4" />
-                    <span>john.doe@lawfirm.com</span>
+                    <span>{user?.email}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Building className="h-4 w-4" />

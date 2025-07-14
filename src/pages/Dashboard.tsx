@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
@@ -6,6 +6,7 @@ import { CategoryFilter } from "@/components/CategoryFilter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Clock, FileText, TrendingUp } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Dashboard() {
   const [searchState, setSearchState] = useState({
@@ -15,6 +16,21 @@ export default function Dashboard() {
     sources: [] as any[],
     error: null as string | null,
   });
+  const [documentCount, setDocumentCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchDocumentCount = async () => {
+      const { count, error } = await supabase
+        .from('documents')
+        .select('*', { count: 'exact', head: true });
+      
+      if (!error) {
+        setDocumentCount(count || 0);
+      }
+    };
+
+    fetchDocumentCount();
+  }, []);
 
   const handleSearch = (query: string, isLoading: boolean, answer: string | null, sources: any[], error: string | null) => {
     setSearchState({ query, isLoading, answer, sources, error });
@@ -22,7 +38,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header isAuthenticated={true} />
+      <Header />
       
       {/* Hero Section with Search */}
       <section className="py-12 px-4 bg-gradient-to-br from-primary/5 to-primary-light/5">
@@ -56,7 +72,9 @@ export default function Dashboard() {
             <Card className="p-6 text-center">
               <div className="flex items-center justify-center gap-3 mb-2">
                 <FileText className="h-5 w-5 text-primary" />
-                <span className="text-2xl font-bold text-foreground">390+</span>
+                <span className="text-2xl font-bold text-foreground">
+                  {documentCount !== null ? documentCount : '...'}
+                </span>
               </div>
               <p className="text-sm text-muted-foreground">Total Documents</p>
             </Card>
