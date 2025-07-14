@@ -26,6 +26,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY')!;
+    const llamaParseApiKey = Deno.env.get('LLAMA_CLOUD_API_KEY');
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -40,33 +41,32 @@ serve(async (req) => {
 
     console.log('File downloaded, processing PDF...');
 
-    // Extract text from PDF using simple text extraction
-    // Note: This is a simplified implementation. In production, you'd want a more robust PDF parser
+    let text = '';
     const arrayBuffer = await fileData.arrayBuffer();
-    const decoder = new TextDecoder();
-    let text = decoder.decode(arrayBuffer);
-    
-    // Simple PDF text extraction (basic approach)
-    // Remove PDF headers, metadata, and clean up the text
-    text = text.replace(/[\x00-\x1F\x7F-\x9F]/g, ' ');
-    text = text.replace(/\s+/g, ' ');
-    text = text.trim();
+
+    // Try LlamaParse first if API key is available
+    if (llamaParseApiKey) {
+      try {
+        console.log('Using LlamaParse for PDF extraction...');
+        text = await extractWithLlamaParse(arrayBuffer, llamaParseApiKey, originalName);
+        console.log(`LlamaParse extracted ${text.length} characters`);
+      } catch (error) {
+        console.warn('LlamaParse failed, falling back to basic extraction:', error);
+        text = await extractPdfBasic(arrayBuffer);
+      }
+    } else {
+      console.log('LlamaParse API key not found, using basic extraction...');
+      text = await extractPdfBasic(arrayBuffer);
+    }
 
     if (!text || text.length < 100) {
-      // If simple extraction fails, try a different approach
-      // This is a fallback for when the PDF contains mostly text
-      const pdfText = await extractPdfTextFallback(arrayBuffer);
-      if (pdfText && pdfText.length > 100) {
-        text = pdfText;
-      } else {
-        throw new Error('Could not extract meaningful text from PDF');
-      }
+      throw new Error('Could not extract meaningful text from PDF');
     }
 
     console.log(`Extracted text length: ${text.length} characters`);
 
-    // Split text into chunks of approximately 800-1000 characters
-    const chunks = splitTextIntoChunks(text, 800, 200); // 800 chars with 200 char overlap
+    // Use structure-aware chunking with RecursiveCharacterTextSplitter approach
+    const chunks = structureAwareChunking(text, 1024, 200);
     console.log(`Created ${chunks.length} text chunks`);
 
     // Generate embeddings for each chunk and insert into database
@@ -88,7 +88,7 @@ serve(async (req) => {
               },
               body: JSON.stringify({
                 model: 'text-embedding-3-small',
-                input: chunk,
+                input: chunk.content,
                 encoding_format: 'float',
               }),
             });
@@ -100,14 +100,14 @@ serve(async (req) => {
             const embeddingData = await embeddingResponse.json();
             const embedding = embeddingData.data[0].embedding;
 
-            // Insert chunk into database
+            // Insert chunk into database with metadata
             const chunkIndex = i + batchIndex + 1;
             const { error: insertError } = await supabase
               .from('documents')
               .insert({
-                title: `${originalName} - Chunk ${chunkIndex}`,
-                content: chunk,
-                category: 'Legal Document',
+                title: chunk.title,
+                content: chunk.content,
+                category: determineCategory(originalName, chunk.metadata),
                 embedding: JSON.stringify(embedding),
               });
 
@@ -160,46 +160,81 @@ serve(async (req) => {
   }
 });
 
-function splitTextIntoChunks(text: string, chunkSize: number, overlap: number): string[] {
-  const chunks: string[] = [];
-  let start = 0;
+async function extractWithLlamaParse(arrayBuffer: ArrayBuffer, apiKey: string, fileName: string): Promise<string> {
+  const formData = new FormData();
+  const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
+  formData.append('file', blob, fileName);
+  formData.append('result_type', 'markdown');
+  formData.append('verbose', 'true');
 
-  while (start < text.length) {
-    let end = start + chunkSize;
-    
-    // If we're not at the end, try to break at a sentence or paragraph boundary
-    if (end < text.length) {
-      const nextPeriod = text.indexOf('.', end - 100);
-      const nextNewline = text.indexOf('\n', end - 100);
-      
-      if (nextPeriod > end - 100 && nextPeriod < end + 50) {
-        end = nextPeriod + 1;
-      } else if (nextNewline > end - 100 && nextNewline < end + 50) {
-        end = nextNewline + 1;
-      }
-    }
+  const response = await fetch('https://api.cloud.llamaindex.ai/api/parsing/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: formData,
+  });
 
-    const chunk = text.slice(start, end).trim();
-    if (chunk.length > 50) { // Only include chunks with meaningful content
-      chunks.push(chunk);
-    }
-
-    // Move start position with overlap
-    start = end - overlap;
-    if (start >= text.length) break;
+  if (!response.ok) {
+    throw new Error(`LlamaParse API error: ${response.statusText}`);
   }
 
-  return chunks;
+  const result = await response.json();
+  const jobId = result.id;
+
+  // Poll for completion
+  let attempts = 0;
+  const maxAttempts = 30; // 5 minutes max
+  
+  while (attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+    
+    const statusResponse = await fetch(`https://api.cloud.llamaindex.ai/api/parsing/job/${jobId}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!statusResponse.ok) {
+      throw new Error(`LlamaParse status check failed: ${statusResponse.statusText}`);
+    }
+
+    const statusResult = await statusResponse.json();
+    
+    if (statusResult.status === 'SUCCESS') {
+      return statusResult.result.markdown || statusResult.result.text || '';
+    } else if (statusResult.status === 'ERROR') {
+      throw new Error(`LlamaParse processing failed: ${statusResult.error}`);
+    }
+    
+    attempts++;
+  }
+
+  throw new Error('LlamaParse processing timed out');
+}
+
+async function extractPdfBasic(arrayBuffer: ArrayBuffer): Promise<string> {
+  const decoder = new TextDecoder();
+  let text = decoder.decode(arrayBuffer);
+  
+  // Remove PDF headers, metadata, and clean up the text
+  text = text.replace(/[\x00-\x1F\x7F-\x9F]/g, ' ');
+  text = text.replace(/\s+/g, ' ');
+  text = text.trim();
+
+  if (!text || text.length < 100) {
+    // Try fallback extraction
+    return await extractPdfTextFallback(arrayBuffer);
+  }
+
+  return text;
 }
 
 async function extractPdfTextFallback(arrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    // This is a very basic fallback implementation
-    // In a production environment, you'd want to use a proper PDF parsing library
     const uint8Array = new Uint8Array(arrayBuffer);
     let text = '';
     
-    // Look for text objects in the PDF
     const decoder = new TextDecoder('utf-8', { fatal: false });
     const pdfString = decoder.decode(uint8Array);
     
@@ -217,4 +252,126 @@ async function extractPdfTextFallback(arrayBuffer: ArrayBuffer): Promise<string>
     console.error('PDF fallback extraction failed:', error);
     return '';
   }
+}
+
+interface ChunkWithMetadata {
+  content: string;
+  title: string;
+  metadata: Record<string, any>;
+}
+
+function structureAwareChunking(text: string, chunkSize: number, overlap: number): ChunkWithMetadata[] {
+  const chunks: ChunkWithMetadata[] = [];
+  
+  // Hierarchy of separators for legal documents
+  const separators = [
+    '\n\n## ',      // Main sections
+    '\n\n### ',     // Subsections
+    '\n\n#### ',    // Sub-subsections
+    '\n\n',         // Paragraphs
+    '\n',           // Lines
+    '. ',           // Sentences
+    ' ',            // Words
+  ];
+
+  const textChunks = recursiveTextSplit(text, separators, chunkSize, overlap);
+  
+  // Extract metadata and create structured chunks
+  let currentSection = 'Document';
+  let chunkCounter = 1;
+
+  for (const chunk of textChunks) {
+    if (chunk.trim().length < 50) continue; // Skip very small chunks
+    
+    // Try to extract section headers for better titles
+    const lines = chunk.split('\n');
+    const firstLine = lines[0].trim();
+    
+    // Check if first line looks like a header
+    if (firstLine.match(/^#{1,4}\s+/) || firstLine.match(/^[A-Z][^.]*:?\s*$/)) {
+      currentSection = firstLine.replace(/^#{1,4}\s+/, '').trim();
+    }
+
+    const title = `${currentSection} - Part ${chunkCounter}`;
+    
+    chunks.push({
+      content: chunk.trim(),
+      title: title,
+      metadata: {
+        section: currentSection,
+        chunk_index: chunkCounter,
+        word_count: chunk.split(/\s+/).length,
+      }
+    });
+    
+    chunkCounter++;
+  }
+
+  return chunks;
+}
+
+function recursiveTextSplit(text: string, separators: string[], chunkSize: number, overlap: number): string[] {
+  if (separators.length === 0) {
+    return [text];
+  }
+
+  const [separator, ...remainingSeparators] = separators;
+  const splits = text.split(separator);
+  
+  if (splits.length === 1) {
+    // Separator not found, try next separator
+    return recursiveTextSplit(text, remainingSeparators, chunkSize, overlap);
+  }
+
+  const chunks: string[] = [];
+  let currentChunk = '';
+
+  for (let i = 0; i < splits.length; i++) {
+    const split = splits[i];
+    const potentialChunk = currentChunk + (currentChunk ? separator : '') + split;
+
+    if (potentialChunk.length <= chunkSize) {
+      currentChunk = potentialChunk;
+    } else {
+      if (currentChunk) {
+        chunks.push(currentChunk);
+        
+        // Handle overlap
+        const overlapText = currentChunk.slice(-overlap);
+        currentChunk = overlapText + separator + split;
+      } else {
+        // Single split is too large, recursively split it
+        const subChunks = recursiveTextSplit(split, remainingSeparators, chunkSize, overlap);
+        chunks.push(...subChunks);
+      }
+    }
+  }
+
+  if (currentChunk) {
+    chunks.push(currentChunk);
+  }
+
+  return chunks;
+}
+
+function determineCategory(fileName: string, metadata: Record<string, any>): string {
+  const lowerFileName = fileName.toLowerCase();
+  
+  if (lowerFileName.includes('jury') || lowerFileName.includes('instruction')) {
+    return 'Model Jury Instructions';
+  } else if (lowerFileName.includes('criminal') && lowerFileName.includes('procedure')) {
+    return 'Rules of Criminal Procedure';
+  } else if (lowerFileName.includes('general') && lowerFileName.includes('law')) {
+    return 'MA General Laws';
+  }
+  
+  // Try to determine from content
+  const section = metadata.section?.toLowerCase() || '';
+  if (section.includes('rule') || section.includes('procedure')) {
+    return 'Rules of Criminal Procedure';
+  } else if (section.includes('chapter') || section.includes('section')) {
+    return 'MA General Laws';
+  }
+  
+  return 'Legal Document';
 }

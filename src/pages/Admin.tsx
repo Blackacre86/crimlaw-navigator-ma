@@ -178,31 +178,108 @@ export default function Admin() {
           </CardContent>
         </Card>
 
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Enhanced RAG Pipeline Status</CardTitle>
+            <CardDescription>
+              Phase 1 foundation upgrades - Production-grade legal document processing
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                <p className="text-sm font-medium text-green-800">Vector Search</p>
+                <p className="text-xs text-green-600">Active</p>
+              </div>
+              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                <p className="text-sm font-medium text-green-800">Hybrid Search</p>
+                <p className="text-xs text-green-600">RRF Enabled</p>
+              </div>
+              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                <p className="text-sm font-medium text-green-800">Cross-Encoder</p>
+                <p className="text-xs text-green-600">Re-ranking</p>
+              </div>
+              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                <p className="text-sm font-medium text-green-800">Structure-Aware</p>
+                <p className="text-xs text-green-600">Chunking</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Enhanced PDF Processing</CardTitle>
+            <CardDescription>
+              Advanced text extraction with LlamaParse integration and intelligent fallbacks
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+              <h4 className="font-medium mb-2 text-blue-800">Current Features:</h4>
+              <ul className="text-sm space-y-1 text-blue-700">
+                <li>• <strong>LlamaParse Integration:</strong> Superior extraction of complex layouts, tables, footnotes</li>
+                <li>• <strong>Structure-Aware Chunking:</strong> Preserves document hierarchy (sections, subsections)</li>
+                <li>• <strong>Hybrid Search:</strong> Combines semantic + keyword search with Reciprocal Rank Fusion</li>
+                <li>• <strong>Cross-Encoder Re-ranking:</strong> GPT-4o powered relevance scoring for precision</li>
+                <li>• <strong>Legal Category Detection:</strong> Automatically categorizes by document type</li>
+                <li>• <strong>Robust Fallbacks:</strong> Multiple extraction methods ensure reliable processing</li>
+              </ul>
+            </div>
+            
+            <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
+              <h4 className="font-medium mb-2 text-amber-800">Optional Enhancement:</h4>
+              <p className="text-sm text-amber-700 mb-3">
+                For maximum PDF parsing accuracy, add a LlamaParse API key. Free tier includes 10,000 credits.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <a href="https://cloud.llamaindex.ai" target="_blank" rel="noopener noreferrer">
+                    Get Free LlamaParse Key
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href="https://supabase.com/dashboard/project/lzssqygnetvznmfubwmr/settings/functions" target="_blank" rel="noopener noreferrer">
+                    Add to Supabase Secrets
+                  </a>
+                </Button>
+              </div>
+              <p className="text-xs text-amber-600 mt-2">
+                Secret name: <code className="bg-amber-100 px-1 rounded">LLAMA_CLOUD_API_KEY</code>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
-            <CardTitle>Processing Instructions</CardTitle>
+            <CardTitle>Processing Pipeline</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="text-center p-4 bg-secondary rounded-lg">
                 <Upload className="h-8 w-8 text-primary mx-auto mb-2" />
-                <h3 className="font-semibold mb-1">Upload</h3>
+                <h3 className="font-semibold mb-1">Enhanced Upload</h3>
                 <p className="text-sm text-muted-foreground">
-                  Select and upload PDF documents
+                  LlamaParse + structure-aware extraction
                 </p>
               </div>
               <div className="text-center p-4 bg-secondary rounded-lg">
                 <FileText className="h-8 w-8 text-primary mx-auto mb-2" />
-                <h3 className="font-semibold mb-1">Process</h3>
+                <h3 className="font-semibold mb-1">Smart Chunking</h3>
                 <p className="text-sm text-muted-foreground">
-                  Extract text and create semantic chunks
+                  Preserve legal document hierarchy
                 </p>
               </div>
               <div className="text-center p-4 bg-secondary rounded-lg">
                 <CheckCircle className="h-8 w-8 text-primary mx-auto mb-2" />
-                <h3 className="font-semibold mb-1">Store</h3>
+                <h3 className="font-semibold mb-1">Hybrid Index</h3>
                 <p className="text-sm text-muted-foreground">
-                  Generate embeddings and store in database
+                  Vector + keyword search with re-ranking
                 </p>
               </div>
             </div>

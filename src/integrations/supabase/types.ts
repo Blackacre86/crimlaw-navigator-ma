@@ -20,6 +20,7 @@ export type Database = {
           content: string
           created_at: string
           embedding: string | null
+          fts: unknown | null
           id: string
           title: string
           updated_at: string
@@ -29,6 +30,7 @@ export type Database = {
           content: string
           created_at?: string
           embedding?: string | null
+          fts?: unknown | null
           id?: string
           title: string
           updated_at?: string
@@ -38,6 +40,7 @@ export type Database = {
           content?: string
           created_at?: string
           embedding?: string | null
+          fts?: unknown | null
           id?: string
           title?: string
           updated_at?: string
@@ -112,6 +115,22 @@ export type Database = {
         Args: { "": unknown }
         Returns: unknown
       }
+      hybrid_search: {
+        Args: {
+          query_text: string
+          query_embedding: string
+          match_count?: number
+          rrf_k?: number
+        }
+        Returns: {
+          id: string
+          title: string
+          category: string
+          content: string
+          created_at: string
+          rrf_score: number
+        }[]
+      }
       ivfflat_bit_support: {
         Args: { "": unknown }
         Returns: unknown
@@ -131,6 +150,21 @@ export type Database = {
       l2_normalize: {
         Args: { "": string } | { "": unknown } | { "": unknown }
         Returns: unknown
+      }
+      match_documents: {
+        Args: {
+          query_embedding: string
+          similarity_threshold?: number
+          match_count?: number
+        }
+        Returns: {
+          id: string
+          title: string
+          category: string
+          content: string
+          created_at: string
+          similarity: number
+        }[]
       }
       sparsevec_out: {
         Args: { "": unknown }
