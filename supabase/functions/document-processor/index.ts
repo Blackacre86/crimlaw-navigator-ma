@@ -187,11 +187,12 @@ async function processDocumentInBackground(
 
     console.log(`✅ Final extraction result: ${text.length} characters using ${extractionMethod}`);
 
-    // Use structure-aware chunking with token-aware sizing
+    // Use conservative chunking with token-aware sizing
     currentStep = 'chunking';
     console.log('📝 Creating text chunks...');
-    // Use ~6000 characters to stay well under 8192 token limit (6000 chars ≈ 1500 tokens)
-    const chunks = structureAwareChunking(text, 6000, 500);
+    // Reduced to ~4000 characters to ensure we stay well under 8192 token limit
+    // With conservative estimation: 4000 chars ≈ 1143 tokens (with safety margin)
+    const chunks = structureAwareChunking(text, 4000, 400);
     console.log(`✅ Created ${chunks.length} text chunks`);
 
     if (chunks.length === 0) {
@@ -227,32 +228,53 @@ async function processDocumentInBackground(
             const chunkIndex = i + batchIndex + 1;
             
             try {
-              // Validate token count before sending to OpenAI
+              // Validate token count before sending to OpenAI with strict limits
               const tokenCount = estimateTokenCount(chunk.content);
               console.log(`📊 Processing chunk ${chunkIndex}: ${chunk.content.length} chars, ~${tokenCount} tokens`);
               
-              if (tokenCount > 8000) {
+              // Use 7000 token limit to provide more safety margin
+              if (tokenCount > 7000) {
                 console.warn(`⚠️ Chunk ${chunkIndex} has ${tokenCount} tokens, splitting...`);
-                // Split oversized chunk into smaller pieces
-                const subChunks = splitOversizedChunk(chunk.content, 6000);
+                // Split oversized chunk with more conservative sizing
+                const subChunks = splitOversizedChunk(chunk.content, 3500);
                 
                 if (subChunks.length > 1) {
                   console.log(`🔄 Split chunk ${chunkIndex} into ${subChunks.length} smaller chunks`);
                   
-                  // Process each sub-chunk
+                  // Process each sub-chunk with validation
                   for (let subIndex = 0; subIndex < subChunks.length; subIndex++) {
                     const subChunk = subChunks[subIndex];
                     const subTokenCount = estimateTokenCount(subChunk);
                     
-                    if (subTokenCount > 8000) {
+                    if (subTokenCount > 7000) {
                       console.error(`❌ Sub-chunk still too large: ${subTokenCount} tokens, skipping`);
                       continue;
                     }
                     
+                    console.log(`📊 Processing sub-chunk ${subIndex + 1}: ${subChunk.length} chars, ~${subTokenCount} tokens`);
                     await processChunkEmbedding(subChunk, `${chunk.title} - Part ${subIndex + 1}`, chunk.metadata, supabase, openaiApiKey, originalName);
                     processedChunks++;
                   }
                   continue; // Skip the original chunk processing
+                } else {
+                  // If splitting didn't work, try even more aggressive splitting
+                  const aggressiveChunks = splitOversizedChunk(chunk.content, 2000);
+                  console.log(`🔄 Aggressive split of chunk ${chunkIndex} into ${aggressiveChunks.length} pieces`);
+                  
+                  for (let agIndex = 0; agIndex < aggressiveChunks.length; agIndex++) {
+                    const agChunk = aggressiveChunks[agIndex];
+                    const agTokenCount = estimateTokenCount(agChunk);
+                    
+                    if (agTokenCount > 7000) {
+                      console.error(`❌ Even aggressive split too large: ${agTokenCount} tokens, skipping`);
+                      continue;
+                    }
+                    
+                    console.log(`📊 Processing aggressive sub-chunk ${agIndex + 1}: ${agChunk.length} chars, ~${agTokenCount} tokens`);
+                    await processChunkEmbedding(agChunk, `${chunk.title} - Part ${agIndex + 1}`, chunk.metadata, supabase, openaiApiKey, originalName);
+                    processedChunks++;
+                  }
+                  continue;
                 }
               }
               
@@ -343,15 +365,20 @@ async function processDocumentInBackground(
   }
 }
 
-// Token counting utility - rough estimation (chars ÷ 4)
+// Improved token counting utility with safety margins for legal text
 function estimateTokenCount(text: string): number {
-  return Math.ceil(text.length / 4);
+  // More conservative estimation for dense legal text
+  // Legal documents often have complex formatting and dense terminology
+  // Use 3.5 chars per token instead of 4 to add safety margin
+  return Math.ceil(text.length / 3.5);
 }
 
-// Split oversized chunks into smaller pieces
+// Enhanced chunk splitting with multiple strategies for oversized content
 function splitOversizedChunk(text: string, maxChars: number): string[] {
   const chunks: string[] = [];
-  const sentences = text.split(/[.!?]+/);
+  
+  // Strategy 1: Split by sentences (periods, exclamation marks, question marks)
+  const sentences = text.split(/[.!?]+\s+/);
   let currentChunk = '';
   
   for (const sentence of sentences) {
@@ -359,7 +386,60 @@ function splitOversizedChunk(text: string, maxChars: number): string[] {
     
     const sentenceWithPunct = sentence.trim() + '.';
     
-    if (currentChunk.length + sentenceWithPunct.length <= maxChars) {
+    // If a single sentence is too large, split it further
+    if (sentenceWithPunct.length > maxChars) {
+      // Save current chunk if it exists
+      if (currentChunk) {
+        chunks.push(currentChunk.trim());
+        currentChunk = '';
+      }
+      
+      // Strategy 2: Split long sentences by semicolons and commas
+      const subSentences = sentenceWithPunct.split(/[;,]\s+/);
+      let currentSubChunk = '';
+      
+      for (const subSentence of subSentences) {
+        if (subSentence.trim().length === 0) continue;
+        
+        if (currentSubChunk.length + subSentence.length <= maxChars) {
+          currentSubChunk += (currentSubChunk ? ', ' : '') + subSentence.trim();
+        } else {
+          if (currentSubChunk) {
+            chunks.push(currentSubChunk.trim());
+          }
+          
+          // Strategy 3: If still too large, split by character limit with word boundaries
+          if (subSentence.length > maxChars) {
+            const words = subSentence.split(/\s+/);
+            let wordChunk = '';
+            
+            for (const word of words) {
+              if (wordChunk.length + word.length + 1 <= maxChars) {
+                wordChunk += (wordChunk ? ' ' : '') + word;
+              } else {
+                if (wordChunk) {
+                  chunks.push(wordChunk.trim());
+                }
+                wordChunk = word;
+              }
+            }
+            
+            if (wordChunk) {
+              currentSubChunk = wordChunk;
+            } else {
+              currentSubChunk = '';
+            }
+          } else {
+            currentSubChunk = subSentence.trim();
+          }
+        }
+      }
+      
+      if (currentSubChunk) {
+        chunks.push(currentSubChunk.trim());
+      }
+      
+    } else if (currentChunk.length + sentenceWithPunct.length + 1 <= maxChars) {
       currentChunk += (currentChunk ? ' ' : '') + sentenceWithPunct;
     } else {
       if (currentChunk) {
@@ -373,7 +453,17 @@ function splitOversizedChunk(text: string, maxChars: number): string[] {
     chunks.push(currentChunk.trim());
   }
   
-  return chunks.length > 0 ? chunks : [text]; // Fallback to original if splitting fails
+  // Fallback: if no chunks were created or the result is invalid, use character-based splitting
+  if (chunks.length === 0 || chunks.some(chunk => chunk.length > maxChars)) {
+    console.warn(`⚠️ Advanced splitting failed, using character-based fallback`);
+    const fallbackChunks: string[] = [];
+    for (let i = 0; i < text.length; i += maxChars) {
+      fallbackChunks.push(text.substring(i, i + maxChars));
+    }
+    return fallbackChunks;
+  }
+  
+  return chunks;
 }
 
 // Process individual chunk embedding and database insertion
