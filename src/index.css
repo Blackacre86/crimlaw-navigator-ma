@@ -8,50 +8,52 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Professional legal theme - Navy blues for authority and trust */
+    /* LexInnova Professional Legal Theme */
     --background: 0 0% 100%;
-    --foreground: 215 28% 17%;
+    --foreground: 210 28% 17%;
 
     --card: 0 0% 100%;
-    --card-foreground: 215 28% 17%;
+    --card-foreground: 210 28% 17%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 215 28% 17%;
+    --popover-foreground: 210 28% 17%;
 
-    /* Professional navy blue primary */
-    --primary: 220 85% 20%;
+    /* LexInnova Deep Blue Primary (#0A2540) */
+    --primary: 213 64% 15%;
     --primary-foreground: 0 0% 98%;
     
-    /* Lighter blue accent */
-    --primary-light: 220 60% 35%;
+    /* LexInnova Professional Blue Accent (#007BFF) */
+    --accent-blue: 211 100% 50%;
+    --accent-blue-foreground: 0 0% 100%;
     
-    /* Professional gray secondary */
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 215 28% 17%;
+    /* LexInnova Professional grays */
+    --secondary: 210 14% 96%;
+    --secondary-foreground: 210 28% 17%;
 
-    --muted: 220 14% 96%;
-    --muted-foreground: 215 15% 55%;
+    --muted: 210 14% 96%;
+    --muted-foreground: 210 15% 55%;
 
-    --accent: 220 45% 88%;
-    --accent-foreground: 215 28% 17%;
+    --accent: 210 45% 88%;
+    --accent-foreground: 210 28% 17%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 220 85% 20%;
+    --border: 210 13% 91%;
+    --input: 210 13% 91%;
+    --ring: 213 64% 15%;
 
     --radius: 0.75rem;
     
-    /* Professional gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(220 85% 20%), hsl(220 70% 30%));
-    --gradient-hero: linear-gradient(135deg, hsl(220 85% 20%), hsl(220 70% 25%));
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(220 14% 98%));
+    /* LexInnova Professional gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(213 64% 15%), hsl(211 100% 50%));
+    --gradient-hero: linear-gradient(135deg, hsl(213 64% 15%), hsl(213 60% 20%));
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 14% 98%));
     
-    /* Professional shadows */
-    --shadow-elegant: 0 10px 25px -5px hsl(220 85% 20% / 0.1);
-    --shadow-card: 0 4px 20px -2px hsl(220 85% 20% / 0.08);
+    /* Professional shadows with LexInnova blue tint */
+    --shadow-elegant: 0 10px 25px -5px hsl(213 64% 15% / 0.1);
+    --shadow-card: 0 4px 20px -2px hsl(213 64% 15% / 0.08);
+    --shadow-glow: 0 0 40px hsl(211 100% 50% / 0.15);
     
     /* Smooth transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);

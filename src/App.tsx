@@ -6,10 +6,18 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import Landing from "./pages/Landing";
-import Dashboard from "./pages/Dashboard";
+
+// Public pages
+import LandingPage from "./pages/public/LandingPage";
+
+// Auth pages
+import LoginPage from "./pages/auth/LoginPage";
+import SignupPage from "./pages/auth/SignupPage";
+
+// App pages
+import AppLayout from "./pages/app/AppLayout";
+import DashboardPage from "./pages/app/DashboardPage";
 import Profile from "./pages/Profile";
-import Auth from "./pages/Auth";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
@@ -24,24 +32,27 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/auth" element={<Auth />} />
+              {/* Public Routes */}
+              <Route path="/" element={<LandingPage />} />
+              
+              {/* Auth Routes */}
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/signup" element={<SignupPage />} />
+              
+              {/* Protected App Routes */}
               <Route 
-                path="/dashboard" 
+                path="/app" 
                 element={
                   <ProtectedRoute>
-                    <Dashboard />
+                    <AppLayout />
                   </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/profile" 
-                element={
-                  <ProtectedRoute>
-                    <Profile />
-                  </ProtectedRoute>
-                } 
-              />
+                }
+              >
+                <Route index element={<DashboardPage />} />
+                <Route path="profile" element={<Profile />} />
+              </Route>
+              
+              {/* Admin Routes */}
               <Route 
                 path="/admin" 
                 element={
@@ -50,7 +61,11 @@ const App = () => (
                   </ProtectedRoute>
                 } 
               />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+              
+              {/* Legacy redirect for old dashboard route */}
+              <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+              
+              {/* 404 Catch-all */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
