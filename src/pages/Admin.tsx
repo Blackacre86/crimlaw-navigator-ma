@@ -10,6 +10,9 @@ import { Separator } from '@/components/ui/separator';
 import { Upload, FileText, CheckCircle, AlertCircle, Eye, Settings } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import ProcessingJobsTable from '@/components/ProcessingJobsTable';
+import ProcessingStats from '@/components/ProcessingStats';
+import { useProcessingJobs } from '@/hooks/useProcessingJobs';
 
 export default function Admin() {
   const { profile } = useAuth();
@@ -18,6 +21,7 @@ export default function Admin() {
   const [status, setStatus] = useState('');
   const [progress, setProgress] = useState(0);
   const { toast } = useToast();
+  const { jobs, loading: jobsLoading, refreshJobs, stats } = useProcessingJobs();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -82,6 +86,9 @@ export default function Admin() {
       setFile(null);
       const input = document.getElementById('file-input') as HTMLInputElement;
       if (input) input.value = '';
+      
+      // Refresh jobs list to show the new job
+      setTimeout(refreshJobs, 1000);
 
     } catch (error: any) {
       console.error('Error processing document:', error);
@@ -178,6 +185,20 @@ export default function Admin() {
             )}
           </CardContent>
         </Card>
+
+        {/* Processing Statistics */}
+        <div className="mb-6">
+          <ProcessingStats stats={stats} />
+        </div>
+
+        {/* Processing Jobs Monitor */}
+        <div className="mb-6">
+          <ProcessingJobsTable 
+            jobs={jobs} 
+            onRefresh={refreshJobs}
+            loading={jobsLoading}
+          />
+        </div>
 
         <Card className="mb-6">
           <CardHeader>
