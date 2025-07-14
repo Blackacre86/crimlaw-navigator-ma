@@ -39,82 +39,109 @@ serve(async (req) => {
 
     console.log('Processing query:', query);
 
-    // Generate embedding for the user's query
-    const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'text-embedding-3-small',
-        input: query,
-      }),
-    });
+    // Step 1: RAG-Fusion Query Expansion
+    console.log('Generating query variations for RAG-Fusion...');
+    const queryVariations = await generateQueryVariations(query, openAIApiKey);
+    const allQueries = [query, ...queryVariations];
+    console.log('Generated queries:', allQueries);
 
-    if (!embeddingResponse.ok) {
-      const errorData = await embeddingResponse.text();
-      console.error('OpenAI embedding error:', errorData);
+    // Step 2: Generate embeddings for all query variations
+    const embeddingResponses = await Promise.all(
+      allQueries.map(async (q) => {
+        const response = await fetch('https://api.openai.com/v1/embeddings', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openAIApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'text-embedding-3-small',
+            input: q,
+          }),
+        });
+
+        if (!response.ok) {
+          console.warn(`Failed to generate embedding for query: ${q}`);
+          return null;
+        }
+
+        const data = await response.json();
+        return { query: q, embedding: data.data[0].embedding };
+      })
+    );
+
+    const validEmbeddings = embeddingResponses.filter(Boolean);
+    
+    if (validEmbeddings.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'Failed to generate embedding' }),
+        JSON.stringify({ error: 'Failed to generate embeddings for queries' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const embeddingData = await embeddingResponse.json();
-    const queryEmbedding = embeddingData.data[0].embedding;
+    console.log('Performing RAG-Fusion search with multiple queries...');
 
-    console.log('Performing hybrid search...');
+    // Step 3: Execute searches for all query variations in parallel
+    const searchPromises = validEmbeddings.map(async ({ query: q, embedding }) => {
+      try {
+        // Try hybrid search first
+        const { data: hybridResults, error: hybridError } = await supabase.rpc('hybrid_search', {
+          query_text: q,
+          query_embedding: embedding,
+          match_count: 15 // Smaller per-query limit since we're fusing multiple results
+        });
 
-    // Try hybrid search first (combines vector + keyword search with RRF)
-    let documents: any[] = [];
-    
-    try {
-      const { data: hybridResults, error: hybridError } = await supabase.rpc('hybrid_search', {
-        query_text: query,
-        query_embedding: queryEmbedding,
-        match_count: 20
-      });
+        if (hybridError) {
+          console.warn(`Hybrid search failed for query "${q}", falling back to vector search`);
+          
+          // Fallback to vector search
+          const { data: vectorResults, error: vectorError } = await supabase.rpc('match_documents', {
+            query_embedding: embedding,
+            similarity_threshold: 0.7,
+            match_count: 10
+          });
 
-      if (hybridError) {
-        console.warn('Hybrid search failed, falling back to vector search:', hybridError);
-        throw hybridError;
-      }
+          if (vectorError) {
+            console.warn(`Vector search also failed for query "${q}"`);
+            return [];
+          }
 
-      documents = hybridResults || [];
-      console.log(`Hybrid search returned ${documents.length} results`);
-
-    } catch (error) {
-      // Fallback to pure vector search
-      console.log('Using fallback vector search...');
-      
-      const { data: vectorResults, error: vectorError } = await supabase.rpc('match_documents', {
-        query_embedding: queryEmbedding,
-        similarity_threshold: 0.7,
-        match_count: 5
-      });
-
-      if (vectorError) {
-        console.warn('Vector search failed, using basic fallback:', vectorError);
-        
-        // Last resort: return random documents
-        const { data: fallbackDocuments, error: fallbackError } = await supabase
-          .from('documents')
-          .select('title, category, content')
-          .limit(5);
-
-        if (fallbackError) {
-          console.error('All search methods failed:', fallbackError);
-          return new Response(
-            JSON.stringify({ error: 'Database search failed' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          return vectorResults || [];
         }
 
-        documents = fallbackDocuments || [];
-      } else {
-        documents = vectorResults || [];
+        return hybridResults || [];
+      } catch (error) {
+        console.warn(`Search failed for query "${q}":`, error);
+        return [];
       }
+    });
+
+    const allSearchResults = await Promise.all(searchPromises);
+
+    // Step 4: RAG-Fusion - Combine results using Reciprocal Rank Fusion (RRF)
+    console.log('Fusing search results with RRF...');
+    const documents = fuseSearchResults(allSearchResults, 50); // k=50 for RRF
+    
+    console.log(`RAG-Fusion returned ${documents.length} unique results`);
+
+    // Fallback if no results from any query
+    if (documents.length === 0) {
+      console.log('No results from any search variation, using basic fallback...');
+      
+      const { data: fallbackDocuments, error: fallbackError } = await supabase
+        .from('documents')
+        .select('title, category, content')
+        .limit(5);
+
+      if (fallbackError) {
+        console.error('All search methods failed:', fallbackError);
+        return new Response(
+          JSON.stringify({ error: 'Database search failed' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      documents.push(...(fallbackDocuments || []));
     }
 
     // If we have many results, apply cross-encoder re-ranking
@@ -194,7 +221,8 @@ Please provide a comprehensive answer based only on these legal texts. If you qu
           category: doc.category,
           relevance_score: doc.rrf_score || doc.similarity || 0
         })),
-        search_method: documents.length > 5 ? 'hybrid_with_reranking' : 'hybrid'
+        search_method: 'rag_fusion' + (documents.length > 5 ? '_with_reranking' : ''),
+        query_variations: queryVariations
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -207,6 +235,80 @@ Please provide a comprehensive answer based only on these legal texts. If you qu
     );
   }
 });
+
+// Generate query variations for RAG-Fusion
+async function generateQueryVariations(originalQuery: string, apiKey: string): Promise<string[]> {
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an expert legal research assistant specializing in Massachusetts Criminal Law. Your task is to rewrite a user's query to improve search recall and precision.
+
+Generate 3 diverse, alternative search queries that a legal expert might use. Frame the queries from different perspectives, such as a defense attorney, a prosecutor, and a legal scholar. Include specific legal terms of art, statutory language (e.g., M.G.L. citations), and relevant legal concepts where appropriate.
+
+Return only the 3 alternative queries, one per line, without numbering or explanation.`
+          },
+          {
+            role: 'user',
+            content: `Given the user's query: "${originalQuery}"\n\nGenerate 3 alternative search queries:`
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 300,
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to generate query variations');
+      return [];
+    }
+
+    const data = await response.json();
+    const variations = data.choices[0].message.content
+      .split('\n')
+      .map((line: string) => line.trim())
+      .filter((line: string) => line.length > 0)
+      .slice(0, 3); // Ensure we only get 3 variations
+
+    return variations;
+  } catch (error) {
+    console.warn('Error generating query variations:', error);
+    return [];
+  }
+}
+
+// Fuse multiple search result lists using Reciprocal Rank Fusion (RRF)
+function fuseSearchResults(searchResults: any[][], k: number = 50): any[] {
+  const documentScores = new Map<string, { document: any; score: number }>();
+
+  // Apply RRF scoring across all result lists
+  searchResults.forEach((results) => {
+    results.forEach((doc, index) => {
+      const docId = doc.id;
+      const rank = index + 1;
+      const rrfScore = 1.0 / (k + rank);
+
+      if (documentScores.has(docId)) {
+        documentScores.get(docId)!.score += rrfScore;
+      } else {
+        documentScores.set(docId, { document: doc, score: rrfScore });
+      }
+    });
+  });
+
+  // Sort by fused score and return documents
+  return Array.from(documentScores.values())
+    .sort((a, b) => b.score - a.score)
+    .map(({ document, score }) => ({ ...document, rrf_score: score }));
+}
 
 // Simple cross-encoder re-ranking using GPT-4o for relevance scoring
 async function reRankWithCrossEncoder(query: string, documents: any[], apiKey: string): Promise<any[]> {

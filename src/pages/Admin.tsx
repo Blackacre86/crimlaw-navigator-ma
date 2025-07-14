@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { Upload, FileText, CheckCircle, AlertCircle, Eye, Settings } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -182,15 +183,15 @@ export default function Admin() {
           <CardHeader>
             <CardTitle>Enhanced RAG Pipeline Status</CardTitle>
             <CardDescription>
-              Phase 1 foundation upgrades - Production-grade legal document processing
+              Phase 2 advanced reasoning & feature integration - RAG-Fusion and OCR
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
                 <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-sm font-medium text-green-800">Vector Search</p>
-                <p className="text-xs text-green-600">Active</p>
+                <p className="text-sm font-medium text-green-800">RAG-Fusion</p>
+                <p className="text-xs text-green-600">Query Expansion</p>
               </div>
               <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
                 <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
@@ -199,13 +200,13 @@ export default function Admin() {
               </div>
               <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
                 <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-sm font-medium text-green-800">Cross-Encoder</p>
-                <p className="text-xs text-green-600">Re-ranking</p>
+                <p className="text-sm font-medium text-green-800">OCR Ready</p>
+                <p className="text-xs text-green-600">Scanned PDFs</p>
               </div>
               <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
                 <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-sm font-medium text-green-800">Structure-Aware</p>
-                <p className="text-xs text-green-600">Chunking</p>
+                <p className="text-sm font-medium text-green-800">Cross-Encoder</p>
+                <p className="text-xs text-green-600">Re-ranking</p>
               </div>
             </div>
           </CardContent>
@@ -213,44 +214,84 @@ export default function Admin() {
 
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Enhanced PDF Processing</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Advanced Processing Configuration
+            </CardTitle>
             <CardDescription>
-              Advanced text extraction with LlamaParse integration and intelligent fallbacks
+              Configure advanced features for enhanced document processing and search
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-              <h4 className="font-medium mb-2 text-blue-800">Current Features:</h4>
-              <ul className="text-sm space-y-1 text-blue-700">
-                <li>• <strong>LlamaParse Integration:</strong> Superior extraction of complex layouts, tables, footnotes</li>
-                <li>• <strong>Structure-Aware Chunking:</strong> Preserves document hierarchy (sections, subsections)</li>
-                <li>• <strong>Hybrid Search:</strong> Combines semantic + keyword search with Reciprocal Rank Fusion</li>
-                <li>• <strong>Cross-Encoder Re-ranking:</strong> GPT-4o powered relevance scoring for precision</li>
-                <li>• <strong>Legal Category Detection:</strong> Automatically categorizes by document type</li>
-                <li>• <strong>Robust Fallbacks:</strong> Multiple extraction methods ensure reliable processing</li>
-              </ul>
-            </div>
-            
-            <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg">
-              <h4 className="font-medium mb-2 text-amber-800">Optional Enhancement:</h4>
-              <p className="text-sm text-amber-700 mb-3">
-                For maximum PDF parsing accuracy, add a LlamaParse API key. Free tier includes 10,000 credits.
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <a href="https://cloud.llamaindex.ai" target="_blank" rel="noopener noreferrer">
-                    Get Free LlamaParse Key
-                  </a>
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href="https://supabase.com/dashboard/project/lzssqygnetvznmfubwmr/settings/functions" target="_blank" rel="noopener noreferrer">
-                    Add to Supabase Secrets
-                  </a>
-                </Button>
+          <CardContent className="space-y-6">
+            <div>
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                LlamaParse (Enhanced PDF Processing)
+              </h4>
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <p className="text-sm text-blue-700 mb-3">
+                  LlamaParse provides superior extraction of complex layouts, tables, footnotes, and structured legal documents.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="https://cloud.llamaindex.ai" target="_blank" rel="noopener noreferrer">
+                      Get Free API Key
+                    </a>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="https://supabase.com/dashboard/project/lzssqygnetvznmfubwmr/settings/functions" target="_blank" rel="noopener noreferrer">
+                      Add to Supabase Secrets
+                    </a>
+                  </Button>
+                </div>
+                <p className="text-xs text-blue-600 mt-2">
+                  Secret name: <code className="bg-blue-100 px-1 rounded">LLAMA_CLOUD_API_KEY</code>
+                </p>
               </div>
-              <p className="text-xs text-amber-600 mt-2">
-                Secret name: <code className="bg-amber-100 px-1 rounded">LLAMA_CLOUD_API_KEY</code>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h4 className="font-medium mb-3 flex items-center gap-2">
+                <Eye className="h-4 w-4" />
+                OCR.Space (Scanned Document Processing)
+              </h4>
+              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                <p className="text-sm text-green-700 mb-3">
+                  Automatically processes scanned PDFs when text extraction yields minimal content. Perfect for older legal documents and evidence files.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="https://ocr.space/ocrapi" target="_blank" rel="noopener noreferrer">
+                      Get Free OCR API Key
+                    </a>
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <a href="https://supabase.com/dashboard/project/lzssqygnetvznmfubwmr/settings/functions" target="_blank" rel="noopener noreferrer">
+                      Add to Supabase Secrets
+                    </a>
+                  </Button>
+                </div>
+                <p className="text-xs text-green-600 mt-2">
+                  Secret name: <code className="bg-green-100 px-1 rounded">OCR_SPACE_API_KEY</code>
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-purple-50 border border-purple-200 p-4 rounded-lg">
+              <h5 className="font-medium text-purple-900 mb-2">
+                ✨ New: RAG-Fusion Search Technology
+              </h5>
+              <p className="text-sm text-purple-800 mb-3">
+                The search system now uses RAG-Fusion with intelligent query expansion. Each search automatically:
               </p>
+              <ul className="text-sm space-y-1 text-purple-700">
+                <li>• Generates 3 alternative legal query variations using GPT-4o</li>
+                <li>• Executes parallel searches for original + expanded queries</li>
+                <li>• Fuses results using Reciprocal Rank Fusion (RRF) algorithm</li>
+                <li>• Bridges terminology gaps between novice and expert users</li>
+              </ul>
             </div>
           </CardContent>
         </Card>

@@ -59,6 +59,27 @@ serve(async (req) => {
       text = await extractPdfBasic(arrayBuffer);
     }
 
+    // Check if we might need OCR (scanned document detection)
+    const fileSizeKB = arrayBuffer.byteLength / 1024;
+    if (text.length < 500 && fileSizeKB > 100) {
+      console.log('Potential scanned document detected (low text/size ratio). Attempting OCR...');
+      
+      const ocrSpaceApiKey = Deno.env.get('OCR_SPACE_API_KEY');
+      if (ocrSpaceApiKey) {
+        try {
+          const ocrText = await extractWithOCR(arrayBuffer, ocrSpaceApiKey, originalName);
+          if (ocrText && ocrText.length > text.length) {
+            console.log(`OCR extracted ${ocrText.length} characters, using OCR result`);
+            text = ocrText;
+          }
+        } catch (error) {
+          console.warn('OCR extraction failed:', error);
+        }
+      } else {
+        console.warn('OCR_SPACE_API_KEY not found, skipping OCR fallback');
+      }
+    }
+
     if (!text || text.length < 100) {
       throw new Error('Could not extract meaningful text from PDF');
     }
@@ -228,6 +249,62 @@ async function extractPdfBasic(arrayBuffer: ArrayBuffer): Promise<string> {
   }
 
   return text;
+}
+
+// OCR extraction using OCR.Space API
+async function extractWithOCR(arrayBuffer: ArrayBuffer, apiKey: string, fileName: string): Promise<string> {
+  console.log('Starting OCR extraction with OCR.Space...');
+  
+  try {
+    // Convert ArrayBuffer to Blob
+    const fileBlob = new Blob([arrayBuffer], { type: 'application/pdf' });
+    
+    // Prepare form data for OCR.Space API
+    const formData = new FormData();
+    formData.append('file', fileBlob, fileName);
+    formData.append('apikey', apiKey);
+    formData.append('language', 'eng');
+    formData.append('isOverlayRequired', 'false');
+    formData.append('filetype', 'PDF');
+    formData.append('detectOrientation', 'true');
+    formData.append('isTable', 'true'); // Better for legal documents with structured content
+
+    console.log('Sending request to OCR.Space API...');
+    
+    const response = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`OCR API request failed with status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (result.IsErroredOnProcessing) {
+      throw new Error(`OCR processing error: ${result.ErrorMessage || 'Unknown error'}`);
+    }
+
+    if (!result.ParsedResults || result.ParsedResults.length === 0) {
+      throw new Error('No OCR results returned');
+    }
+
+    // Extract text from all pages
+    let extractedText = '';
+    for (const parsedResult of result.ParsedResults) {
+      if (parsedResult.ParsedText) {
+        extractedText += parsedResult.ParsedText + '\n\n';
+      }
+    }
+
+    console.log(`OCR extraction completed: ${extractedText.length} characters`);
+    return extractedText.trim();
+
+  } catch (error) {
+    console.error('OCR extraction error:', error);
+    throw error;
+  }
 }
 
 async function extractPdfTextFallback(arrayBuffer: ArrayBuffer): Promise<string> {
