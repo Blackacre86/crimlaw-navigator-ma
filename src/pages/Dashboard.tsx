@@ -3,6 +3,7 @@ import { Header } from "@/components/Header";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
 import { CategoryFilter } from "@/components/CategoryFilter";
+import { SearchHistory } from "@/components/SearchHistory";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Clock, FileText, TrendingUp } from "lucide-react";
@@ -17,23 +18,81 @@ export default function Dashboard() {
     error: null as string | null,
   });
   const [documentCount, setDocumentCount] = useState<number | null>(null);
+  const [recentSearches, setRecentSearches] = useState<number>(0);
+  const [categoryStats, setCategoryStats] = useState<number>(0);
+  const [recentDocuments, setRecentDocuments] = useState<any[]>([]);
 
   useEffect(() => {
-    const fetchDocumentCount = async () => {
-      const { count, error } = await supabase
+    const fetchStats = async () => {
+      // Get total document count
+      const { count: totalDocs } = await supabase
         .from('documents')
         .select('*', { count: 'exact', head: true });
       
-      if (!error) {
-        setDocumentCount(count || 0);
+      // Get category breakdown
+      const { data: categories } = await supabase
+        .from('documents')
+        .select('category')
+        .neq('category', null);
+      
+      if (totalDocs) {
+        setDocumentCount(totalDocs);
+      }
+      
+      if (categories) {
+        const categoryCount = [...new Set(categories.map(doc => doc.category))].length;
+        setCategoryStats(categoryCount);
+      }
+      
+      // Get recent searches from localStorage or set to 0 for now
+      const searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+      setRecentSearches(searchHistory.length);
+      
+      // Get recent documents
+      const { data: recentDocs } = await supabase
+        .from('documents')
+        .select('title, category, created_at')
+        .order('created_at', { ascending: false })
+        .limit(6);
+      
+      if (recentDocs) {
+        setRecentDocuments(recentDocs);
       }
     };
 
-    fetchDocumentCount();
+    fetchStats();
+  }, []);
+
+  useEffect(() => {
+    // Listen for category search events
+    const handleCategorySearch = (event: CustomEvent) => {
+      const { query } = event.detail;
+      // Trigger search with category query
+      setSearchState(prev => ({ ...prev, query }));
+    };
+
+    window.addEventListener('categorySearch', handleCategorySearch as EventListener);
+    return () => {
+      window.removeEventListener('categorySearch', handleCategorySearch as EventListener);
+    };
   }, []);
 
   const handleSearch = (query: string, isLoading: boolean, answer: string | null, sources: any[], error: string | null) => {
     setSearchState({ query, isLoading, answer, sources, error });
+    
+    // Store search in localStorage for recent searches tracking
+    if (query.trim()) {
+      const searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+      const newSearch = {
+        query,
+        timestamp: new Date().toISOString(),
+        id: Date.now()
+      };
+      
+      const updatedHistory = [newSearch, ...searchHistory.slice(0, 49)]; // Keep last 50 searches
+      localStorage.setItem('searchHistory', JSON.stringify(updatedHistory));
+      setRecentSearches(updatedHistory.length);
+    }
   };
 
   return (
@@ -53,6 +112,9 @@ export default function Dashboard() {
           </div>
           
           <SearchBar onSearch={handleSearch} />
+          <div className="mt-6 max-w-2xl mx-auto">
+            <SearchHistory onSelectSearch={(query) => setSearchState(prev => ({ ...prev, query }))} />
+          </div>
         </div>
       </section>
 
@@ -82,7 +144,9 @@ export default function Dashboard() {
             <Card className="p-6 text-center">
               <div className="flex items-center justify-center gap-3 mb-2">
                 <Clock className="h-5 w-5 text-primary" />
-                <span className="text-2xl font-bold text-foreground">12</span>
+                <span className="text-2xl font-bold text-foreground">
+                  {recentSearches}
+                </span>
               </div>
               <p className="text-sm text-muted-foreground">Recent Searches</p>
             </Card>
@@ -90,9 +154,11 @@ export default function Dashboard() {
             <Card className="p-6 text-center">
               <div className="flex items-center justify-center gap-3 mb-2">
                 <TrendingUp className="h-5 w-5 text-primary" />
-                <span className="text-2xl font-bold text-foreground">95%</span>
+                <span className="text-2xl font-bold text-foreground">
+                  {categoryStats}
+                </span>
               </div>
-              <p className="text-sm text-muted-foreground">Search Accuracy</p>
+              <p className="text-sm text-muted-foreground">Categories</p>
             </Card>
           </div>
         </div>
@@ -113,36 +179,33 @@ export default function Dashboard() {
             <Button variant="outline">View All</Button>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-foreground mb-2">
-                    MGL Ch. 265, § 13 - Assault and Battery
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Massachusetts General Laws - Criminal Code
-                  </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {recentDocuments.length > 0 ? (
+              recentDocuments.map((doc, index) => (
+                <Card key={index} className="p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-2">
+                        {doc.title}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {doc.category}
+                      </p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(doc.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <Button variant="secondary" size="sm">View Document</Button>
+                </Card>
+              ))
+            ) : (
+              <Card className="p-6">
+                <div className="text-center text-muted-foreground">
+                  <p>No recent documents found</p>
                 </div>
-                <span className="text-xs text-muted-foreground">2 hours ago</span>
-              </div>
-              <Button variant="secondary" size="sm">View Document</Button>
-            </Card>
-            
-            <Card className="p-6">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="font-semibold text-foreground mb-2">
-                    Model Jury Instruction 6.120 - Larceny
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Model Jury Instructions
-                  </p>
-                </div>
-                <span className="text-xs text-muted-foreground">1 day ago</span>
-              </div>
-              <Button variant="secondary" size="sm">View Document</Button>
-            </Card>
+              </Card>
+            )}
           </div>
         </div>
       </section>
