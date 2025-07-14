@@ -1,11 +1,25 @@
+import { useState } from "react";
 import { Header } from "@/components/Header";
 import { SearchBar } from "@/components/SearchBar";
+import { SearchResults } from "@/components/SearchResults";
 import { CategoryFilter } from "@/components/CategoryFilter";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Clock, FileText, TrendingUp } from "lucide-react";
 
 export default function Dashboard() {
+  const [searchState, setSearchState] = useState({
+    query: "",
+    isLoading: false,
+    answer: null as string | null,
+    sources: [] as any[],
+    error: null as string | null,
+  });
+
+  const handleSearch = (query: string, isLoading: boolean, answer: string | null, sources: any[], error: string | null) => {
+    setSearchState({ query, isLoading, answer, sources, error });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <Header isAuthenticated={true} />
@@ -22,9 +36,18 @@ export default function Dashboard() {
             </p>
           </div>
           
-          <SearchBar />
+          <SearchBar onSearch={handleSearch} />
         </div>
       </section>
+
+      {/* Search Results */}
+      <SearchResults 
+        isLoading={searchState.isLoading}
+        answer={searchState.answer}
+        sources={searchState.sources}
+        error={searchState.error}
+        query={searchState.query}
+      />
 
       {/* Quick Stats */}
       <section className="py-8 px-4 border-b border-border">
