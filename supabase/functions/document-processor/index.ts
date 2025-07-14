@@ -187,10 +187,11 @@ async function processDocumentInBackground(
 
     console.log(`✅ Final extraction result: ${text.length} characters using ${extractionMethod}`);
 
-    // Use structure-aware chunking with RecursiveCharacterTextSplitter approach
+    // Use structure-aware chunking with token-aware sizing
     currentStep = 'chunking';
     console.log('📝 Creating text chunks...');
-    const chunks = structureAwareChunking(text, 1024, 200);
+    // Use ~6000 characters to stay well under 8192 token limit (6000 chars ≈ 1500 tokens)
+    const chunks = structureAwareChunking(text, 6000, 500);
     console.log(`✅ Created ${chunks.length} text chunks`);
 
     if (chunks.length === 0) {
@@ -226,73 +227,38 @@ async function processDocumentInBackground(
             const chunkIndex = i + batchIndex + 1;
             
             try {
-              // Generate embedding for this chunk with timeout
-              const embeddingController = new AbortController();
-              const embeddingTimeout = setTimeout(() => embeddingController.abort(), 30000); // 30 second timeout
+              // Validate token count before sending to OpenAI
+              const tokenCount = estimateTokenCount(chunk.content);
+              console.log(`📊 Processing chunk ${chunkIndex}: ${chunk.content.length} chars, ~${tokenCount} tokens`);
               
-              const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${openaiApiKey}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  model: 'text-embedding-3-small',
-                  input: chunk.content,
-                  encoding_format: 'float',
-                }),
-                signal: embeddingController.signal,
-              });
-
-              clearTimeout(embeddingTimeout);
-
-              if (!embeddingResponse.ok) {
-                const errorText = await embeddingResponse.text();
-                throw new Error(`OpenAI API error ${embeddingResponse.status}: ${errorText}`);
-              }
-
-              const embeddingData = await embeddingResponse.json();
-              if (!embeddingData.data || !embeddingData.data[0] || !embeddingData.data[0].embedding) {
-                throw new Error('Invalid embedding response from OpenAI');
-              }
-              
-              const embedding = embeddingData.data[0].embedding;
-
-              // Insert chunk into database with retry logic
-              let insertSuccess = false;
-              let insertAttempts = 0;
-              const maxInsertAttempts = 3;
-              
-              while (!insertSuccess && insertAttempts < maxInsertAttempts) {
-                try {
-                  const { error: insertError } = await supabase
-                    .from('documents')
-                    .insert({
-                      title: chunk.title,
-                      content: chunk.content,
-                      category: determineCategory(originalName, chunk.metadata),
-                      embedding: JSON.stringify(embedding),
-                    });
-
-                  if (insertError) {
-                    throw insertError;
+              if (tokenCount > 8000) {
+                console.warn(`⚠️ Chunk ${chunkIndex} has ${tokenCount} tokens, splitting...`);
+                // Split oversized chunk into smaller pieces
+                const subChunks = splitOversizedChunk(chunk.content, 6000);
+                
+                if (subChunks.length > 1) {
+                  console.log(`🔄 Split chunk ${chunkIndex} into ${subChunks.length} smaller chunks`);
+                  
+                  // Process each sub-chunk
+                  for (let subIndex = 0; subIndex < subChunks.length; subIndex++) {
+                    const subChunk = subChunks[subIndex];
+                    const subTokenCount = estimateTokenCount(subChunk);
+                    
+                    if (subTokenCount > 8000) {
+                      console.error(`❌ Sub-chunk still too large: ${subTokenCount} tokens, skipping`);
+                      continue;
+                    }
+                    
+                    await processChunkEmbedding(subChunk, `${chunk.title} - Part ${subIndex + 1}`, chunk.metadata, supabase, openaiApiKey, originalName);
+                    processedChunks++;
                   }
-                  
-                  insertSuccess = true;
-                  processedChunks++;
-                  console.log(`✅ Processed chunk ${chunkIndex}/${chunks.length}`);
-                } catch (insertError) {
-                  insertAttempts++;
-                  console.warn(`⚠️ Insert attempt ${insertAttempts} failed for chunk ${chunkIndex}:`, insertError.message);
-                  
-                  if (insertAttempts >= maxInsertAttempts) {
-                    throw new Error(`Failed to insert chunk ${chunkIndex} after ${maxInsertAttempts} attempts: ${insertError.message}`);
-                  }
-                  
-                  // Wait before retry
-                  await new Promise(resolve => setTimeout(resolve, 1000 * insertAttempts));
+                  continue; // Skip the original chunk processing
                 }
               }
+              
+              await processChunkEmbedding(chunk.content, chunk.title, chunk.metadata, supabase, openaiApiKey, originalName);
+              processedChunks++;
+              console.log(`✅ Processed chunk ${chunkIndex}/${chunks.length}`);
               
             } catch (error) {
               console.error(`❌ Error processing chunk ${chunkIndex}:`, error.message);
@@ -374,6 +340,115 @@ async function processDocumentInBackground(
     }
     
     console.error(`❌ Processing job ${jobId} failed: ${error.message}`);
+  }
+}
+
+// Token counting utility - rough estimation (chars ÷ 4)
+function estimateTokenCount(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+// Split oversized chunks into smaller pieces
+function splitOversizedChunk(text: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  const sentences = text.split(/[.!?]+/);
+  let currentChunk = '';
+  
+  for (const sentence of sentences) {
+    if (sentence.trim().length === 0) continue;
+    
+    const sentenceWithPunct = sentence.trim() + '.';
+    
+    if (currentChunk.length + sentenceWithPunct.length <= maxChars) {
+      currentChunk += (currentChunk ? ' ' : '') + sentenceWithPunct;
+    } else {
+      if (currentChunk) {
+        chunks.push(currentChunk.trim());
+      }
+      currentChunk = sentenceWithPunct;
+    }
+  }
+  
+  if (currentChunk.trim()) {
+    chunks.push(currentChunk.trim());
+  }
+  
+  return chunks.length > 0 ? chunks : [text]; // Fallback to original if splitting fails
+}
+
+// Process individual chunk embedding and database insertion
+async function processChunkEmbedding(
+  content: string, 
+  title: string, 
+  metadata: Record<string, any>, 
+  supabase: any, 
+  openaiApiKey: string, 
+  originalName: string
+) {
+  // Generate embedding for this chunk with timeout
+  const embeddingController = new AbortController();
+  const embeddingTimeout = setTimeout(() => embeddingController.abort(), 30000); // 30 second timeout
+  
+  const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${openaiApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'text-embedding-3-small',
+      input: content,
+      encoding_format: 'float',
+    }),
+    signal: embeddingController.signal,
+  });
+
+  clearTimeout(embeddingTimeout);
+
+  if (!embeddingResponse.ok) {
+    const errorText = await embeddingResponse.text();
+    throw new Error(`OpenAI API error ${embeddingResponse.status}: ${errorText}`);
+  }
+
+  const embeddingData = await embeddingResponse.json();
+  if (!embeddingData.data || !embeddingData.data[0] || !embeddingData.data[0].embedding) {
+    throw new Error('Invalid embedding response from OpenAI');
+  }
+  
+  const embedding = embeddingData.data[0].embedding;
+
+  // Insert chunk into database with retry logic
+  let insertSuccess = false;
+  let insertAttempts = 0;
+  const maxInsertAttempts = 3;
+  
+  while (!insertSuccess && insertAttempts < maxInsertAttempts) {
+    try {
+      const { error: insertError } = await supabase
+        .from('documents')
+        .insert({
+          title: title,
+          content: content,
+          category: determineCategory(originalName, metadata),
+          embedding: JSON.stringify(embedding),
+        });
+
+      if (insertError) {
+        throw insertError;
+      }
+      
+      insertSuccess = true;
+    } catch (insertError) {
+      insertAttempts++;
+      console.warn(`⚠️ Insert attempt ${insertAttempts} failed:`, insertError.message);
+      
+      if (insertAttempts >= maxInsertAttempts) {
+        throw new Error(`Failed to insert chunk after ${maxInsertAttempts} attempts: ${insertError.message}`);
+      }
+      
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 1000 * insertAttempts));
+    }
   }
 }
 
