@@ -16,6 +16,7 @@ import PrivacyPolicyPage from "./pages/public/PrivacyPolicyPage";
 // Auth pages
 import LoginPage from "./pages/auth/LoginPage";
 import SignupPage from "./pages/auth/SignupPage";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 
 // App pages
 import AppLayout from "./pages/app/AppLayout";
@@ -45,6 +46,7 @@ const App = () => (
               {/* Auth Routes */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               
               {/* Protected App Routes */}
               <Route 

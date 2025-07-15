@@ -123,6 +123,9 @@ export default function SignupPage() {
                   onChange={(e) => setFullName(e.target.value)}
                   required
                   disabled={loading}
+                  autoFocus
+                  autoComplete="name"
+                  className="h-12 text-base"
                 />
               </div>
 
@@ -136,6 +139,8 @@ export default function SignupPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={loading}
+                  autoComplete="email"
+                  className="h-12 text-base"
                 />
               </div>
 
@@ -145,11 +150,13 @@ export default function SignupPage() {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Create a password"
+                    placeholder="Create a password (min 6 characters)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     disabled={loading}
+                    autoComplete="new-password"
+                    className="h-12 text-base pr-12"
                   />
                   <Button
                     type="button"
@@ -193,6 +200,8 @@ export default function SignupPage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   disabled={loading}
+                  autoComplete="new-password"
+                  className="h-12 text-base"
                 />
                 {confirmPassword && password !== confirmPassword && (
                   <p className="text-xs text-red-600">Passwords do not match</p>
@@ -207,7 +216,7 @@ export default function SignupPage() {
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full h-12 text-base"
                 disabled={loading || !fullName || !email || !password || password !== confirmPassword}
               >
                 {loading ? (

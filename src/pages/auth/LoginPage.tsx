@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Scale, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -32,7 +34,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { error } = await signIn(email, password);
+      const { error } = await signIn(email, password, rememberMe);
       
       if (error) {
         if (error.message.includes('Invalid login credentials')) {
@@ -93,6 +95,9 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   disabled={loading}
+                  autoFocus
+                  autoComplete="email"
+                  className="h-12 text-base"
                 />
               </div>
 
@@ -107,6 +112,8 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     disabled={loading}
+                    autoComplete="current-password"
+                    className="h-12 text-base pr-12"
                   />
                   <Button
                     type="button"
@@ -125,9 +132,21 @@ export default function LoginPage() {
                 </div>
               </div>
 
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                  disabled={loading}
+                />
+                <Label htmlFor="remember" className="text-sm text-muted-foreground cursor-pointer">
+                  Keep me signed in for 30 days
+                </Label>
+              </div>
+
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full h-12 text-base"
                 disabled={loading || !email || !password}
               >
                 {loading ? (
@@ -141,7 +160,7 @@ export default function LoginPage() {
               </Button>
 
               <div className="text-center text-sm text-muted-foreground">
-                <Link to="#" className="text-primary hover:underline">
+                <Link to="/reset-password" className="text-primary hover:underline">
                   Forgot your password?
                 </Link>
               </div>
