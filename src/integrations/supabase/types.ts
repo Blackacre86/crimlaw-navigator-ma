@@ -72,6 +72,7 @@ export type Database = {
           fts: unknown | null
           id: string
           ingestion_status: string | null
+          parsed_content: string | null
           title: string
           updated_at: string
         }
@@ -87,6 +88,7 @@ export type Database = {
           fts?: unknown | null
           id?: string
           ingestion_status?: string | null
+          parsed_content?: string | null
           title: string
           updated_at?: string
         }
@@ -102,6 +104,7 @@ export type Database = {
           fts?: unknown | null
           id?: string
           ingestion_status?: string | null
+          parsed_content?: string | null
           title?: string
           updated_at?: string
         }

@@ -1,12 +1,21 @@
-import "https://deno.land/x/xhr@0.1.0/mod.ts";
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { corsHeaders } from "../_shared/cors.ts";
+
+interface JobData {
+  id: string
+  job_type: string
+  job_data: {
+    document_id: string
+    file_path: string
+    original_name: string
+  }
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders })
   }
 
   // Health check endpoint
@@ -14,14 +23,9 @@ serve(async (req) => {
     const healthCheck = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      service: 'document-processor',
-      version: '1.0.0',
-      environment: {
-        openai_configured: !!Deno.env.get('OPENAI_API_KEY'),
-        supabase_configured: !!Deno.env.get('SUPABASE_URL'),
-        llamaparse_configured: !!Deno.env.get('LLAMA_CLOUD_API_KEY'),
-        ocr_configured: !!Deno.env.get('OCR_SPACE_API_KEY')
-      }
+      service: 'document-processor-queue',
+      version: '2.0.0',
+      queue_enabled: true
     };
     
     return new Response(JSON.stringify(healthCheck), {
@@ -29,846 +33,181 @@ serve(async (req) => {
     });
   }
 
-  const requestId = Math.random().toString(36).substring(2, 15);
-  console.log(`[${requestId}] 🚀 Document processor function invoked at ${new Date().toISOString()}`);
-
   try {
-    // Parse request body with detailed logging
-    let requestBody;
-    try {
-      requestBody = await req.json();
-      console.log(`[${requestId}] Request body parsed:`, JSON.stringify(requestBody, null, 2));
-    } catch (parseError) {
-      console.error(`[${requestId}] ❌ Failed to parse request body:`, parseError);
-      return new Response(
-        JSON.stringify({ error: 'Invalid JSON in request body', details: parseError.message }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    const { fileName, originalName } = requestBody;
-    
-    if (!fileName || !originalName) {
-      console.error(`[${requestId}] ❌ Missing required parameters. fileName: ${fileName}, originalName: ${originalName}`);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Missing required parameters: fileName and originalName',
-          received: { fileName, originalName }
-        }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
-    console.log(`[${requestId}] 📄 Processing request for: ${originalName} (internal: ${fileName})`);
+    console.log('🔍 Document processor started at:', new Date().toISOString())
 
-    // Check environment variables with detailed logging
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    
-    console.log(`[${requestId}] 🔧 Environment check:`, {
-      hasSupabaseUrl: !!supabaseUrl,
-      hasServiceKey: !!supabaseServiceKey,
-      hasOpenAI: !!openaiApiKey,
-      supabaseUrlPrefix: supabaseUrl?.substring(0, 20) + '...'
-    });
-    
-    if (!supabaseUrl || !supabaseServiceKey) {
-      console.error(`[${requestId}] ❌ Missing Supabase configuration`);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Missing Supabase configuration',
-          details: {
-            hasSupabaseUrl: !!supabaseUrl,
-            hasServiceKey: !!supabaseServiceKey
-          }
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Claim next job from the queue
+    const { data: claimedJobs, error: claimError } = await supabase.rpc('claim_next_job', {
+      p_worker_id: 'document-processor',
+      p_job_types: ['document_processing']
+    })
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    console.log(`[${requestId}] ✅ Supabase client initialized successfully`);
-
-    // Start background processing using EdgeRuntime.waitUntil
-    console.log(`[${requestId}] 🔄 Starting background processing...`);
-    EdgeRuntime.waitUntil(
-      processDocumentInBackground(fileName, originalName, supabase, requestId)
-    );
-
-    // Return immediate response
-    console.log(`[${requestId}] ✅ Document processing started in background`);
-    return new Response(
-      JSON.stringify({
-        success: true,
-        message: 'Document processing started in background',
-        fileName,
-        originalName,
-        status: 'queued',
-        requestId
-      }),
-      { 
-        status: 202, // Accepted - processing in background
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
-    );
-
-  } catch (error) {
-    console.error(`[${requestId}] ❌ Document processor request error:`, {
-      message: error.message,
-      stack: error.stack,
-      name: error.name
-    });
-    return new Response(
-      JSON.stringify({
-        error: error.message,
-        success: false,
-        requestId,
-        errorType: error.name,
-        timestamp: new Date().toISOString()
-      }),
-      {
+    if (claimError) {
+      console.error('❌ Error claiming job:', claimError)
+      return new Response(JSON.stringify({ error: claimError.message }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
-  }
-});
-
-// Background processing function
-async function processDocumentInBackground(
-  fileName: string, 
-  originalName: string, 
-  supabase: any,
-  requestId: string
-) {
-  const startTime = Date.now();
-  let currentStep = 'initialization';
-  let jobId: string | null = null;
-
-  try {
-    console.log(`[${requestId}] 🔄 Background processing started for: ${originalName}`);
-    
-    // Create processing job record
-    const { data: jobData, error: jobError } = await supabase
-      .from('processing_jobs')
-      .insert({
-        document_name: fileName,
-        original_name: originalName,
-        status: 'processing'
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
-      .select()
-      .single();
-
-    if (jobError) {
-      console.error('❌ Failed to create processing job:', jobError);
-      return;
     }
 
-    jobId = jobData.id;
-    console.log(`📝 Created processing job: ${jobId}`);
-
-    // Get environment variables
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
-    const llamaParseApiKey = Deno.env.get('LLAMA_CLOUD_API_KEY');
-    const ocrSpaceApiKey = Deno.env.get('OCR_SPACE_API_KEY');
-
-    if (!openaiApiKey) {
-      throw new Error('OpenAI API key not configured');
-    }
-
-    // Download the file from storage
-    currentStep = 'file_download';
-    console.log('📥 Downloading file from storage...');
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from('documents')
-      .download(fileName);
-
-    if (downloadError) {
-      throw new Error(`Failed to download file: ${downloadError.message}`);
-    }
-
-    const arrayBuffer = await fileData.arrayBuffer();
-    const fileSizeKB = arrayBuffer.byteLength / 1024;
-    console.log(`📊 File downloaded: ${fileSizeKB.toFixed(1)} KB`);
-
-    // Text extraction with fallback chain
-    currentStep = 'text_extraction';
-    let text = '';
-    let extractionMethod = 'none';
-
-    // Try LlamaParse first if API key is available
-    if (llamaParseApiKey) {
-      try {
-        console.log('🔄 Attempting LlamaParse extraction...');
-        text = await extractWithLlamaParse(arrayBuffer, llamaParseApiKey, originalName);
-        extractionMethod = 'llamaparse';
-        console.log(`✅ LlamaParse extracted ${text.length} characters`);
-      } catch (error) {
-        console.warn('❌ LlamaParse failed:', error.message);
-        console.log('🔄 Falling back to basic extraction...');
-        text = await extractPdfBasic(arrayBuffer);
-        extractionMethod = 'basic';
-      }
-    } else {
-      console.log('⚠️ LlamaParse API key not found, using basic extraction...');
-      text = await extractPdfBasic(arrayBuffer);
-      extractionMethod = 'basic';
-    }
-
-    // Check if we might need OCR (scanned document detection)
-    const textToSizeRatio = text.length / fileSizeKB;
-    console.log(`📈 Text extraction stats: ${text.length} chars, ratio: ${textToSizeRatio.toFixed(2)} chars/KB`);
-    
-    if (text.length < 500 && fileSizeKB > 100) {
-      console.log('🔍 Potential scanned document detected (low text/size ratio). Attempting OCR...');
-      
-      if (ocrSpaceApiKey) {
-        try {
-          console.log('🔄 Starting OCR extraction...');
-          const ocrText = await extractWithOCR(arrayBuffer, ocrSpaceApiKey, originalName);
-          if (ocrText && ocrText.length > text.length) {
-            console.log(`✅ OCR extracted ${ocrText.length} characters (better than ${extractionMethod})`);
-            text = ocrText;
-            extractionMethod = 'ocr';
-          } else {
-            console.log(`⚠️ OCR result (${ocrText?.length || 0} chars) not better than ${extractionMethod}`);
-          }
-        } catch (error) {
-          console.warn('❌ OCR extraction failed:', error.message);
-        }
-      } else {
-        console.warn('⚠️ OCR_SPACE_API_KEY not found, skipping OCR fallback');
-      }
-    }
-
-    if (!text || text.length < 100) {
-      throw new Error(`Could not extract meaningful text from PDF. Extracted only ${text?.length || 0} characters using ${extractionMethod}.`);
-    }
-
-    console.log(`✅ Final extraction result: ${text.length} characters using ${extractionMethod}`);
-
-    // Use conservative chunking with token-aware sizing
-    currentStep = 'chunking';
-    console.log('📝 Creating text chunks...');
-    // Reduced to ~4000 characters to ensure we stay well under 8192 token limit
-    // With conservative estimation: 4000 chars ≈ 1143 tokens (with safety margin)
-    const chunks = structureAwareChunking(text, 4000, 400);
-    console.log(`✅ Created ${chunks.length} text chunks`);
-
-    if (chunks.length === 0) {
-      throw new Error('No valid chunks created from extracted text');
-    }
-
-    // Update processing job record with chunks info
-    await supabase
-      .from('processing_jobs')
-      .update({
-        total_chunks: chunks.length,
-        processing_method: extractionMethod
+    // No jobs available
+    if (!claimedJobs || claimedJobs.length === 0) {
+      console.log('ℹ️ No jobs available for processing')
+      return new Response(JSON.stringify({ message: 'No jobs available' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
-      .eq('id', jobId);
-
-    // Generate embeddings for each chunk and insert into database
-    currentStep = 'embedding_generation';
-    let processedChunks = 0;
-    const batchSize = 3; // Reduced batch size for better stability
-    const totalBatches = Math.ceil(chunks.length / batchSize);
-
-    console.log(`🔄 Processing ${chunks.length} chunks in ${totalBatches} batches...`);
-
-    for (let i = 0; i < chunks.length; i += batchSize) {
-      const currentBatch = Math.floor(i / batchSize) + 1;
-      const batch = chunks.slice(i, i + batchSize);
-      
-      console.log(`📦 Processing batch ${currentBatch}/${totalBatches} (chunks ${i + 1}-${Math.min(i + batchSize, chunks.length)})`);
-      
-      try {
-        await Promise.all(
-          batch.map(async (chunk, batchIndex) => {
-            const chunkIndex = i + batchIndex + 1;
-            
-            try {
-              // Validate token count before sending to OpenAI with strict limits
-              const tokenCount = estimateTokenCount(chunk.content);
-              console.log(`📊 Processing chunk ${chunkIndex}: ${chunk.content.length} chars, ~${tokenCount} tokens`);
-              
-              // Use 6000 token limit to provide maximum safety margin
-              if (tokenCount > 6000) {
-                console.warn(`⚠️ Chunk ${chunkIndex} has ${tokenCount} tokens, splitting...`);
-                // Split oversized chunk with more conservative sizing
-                const subChunks = splitOversizedChunk(chunk.content, 3500);
-                
-                if (subChunks.length > 1) {
-                  console.log(`🔄 Split chunk ${chunkIndex} into ${subChunks.length} smaller chunks`);
-                  
-                  // Process each sub-chunk with validation
-                  for (let subIndex = 0; subIndex < subChunks.length; subIndex++) {
-                    const subChunk = subChunks[subIndex];
-                    const subTokenCount = estimateTokenCount(subChunk);
-                    
-                    if (subTokenCount > 6000) {
-                      console.error(`❌ Sub-chunk still too large: ${subTokenCount} tokens, skipping`);
-                      continue;
-                    }
-                    
-                    console.log(`📊 Processing sub-chunk ${subIndex + 1}: ${subChunk.length} chars, ~${subTokenCount} tokens`);
-                    await processChunkEmbedding(subChunk, `${chunk.title} - Part ${subIndex + 1}`, chunk.metadata, supabase, openaiApiKey, originalName);
-                    processedChunks++;
-                  }
-                  return; // Skip the original chunk processing
-                } else {
-                  // If splitting didn't work, try even more aggressive splitting
-                  const aggressiveChunks = splitOversizedChunk(chunk.content, 2000);
-                  console.log(`🔄 Aggressive split of chunk ${chunkIndex} into ${aggressiveChunks.length} pieces`);
-                  
-                  for (let agIndex = 0; agIndex < aggressiveChunks.length; agIndex++) {
-                    const agChunk = aggressiveChunks[agIndex];
-                    const agTokenCount = estimateTokenCount(agChunk);
-                    
-                    if (agTokenCount > 6000) {
-                      console.error(`❌ Even aggressive split too large: ${agTokenCount} tokens, skipping`);
-                      continue;
-                    }
-                    
-                    console.log(`📊 Processing aggressive sub-chunk ${agIndex + 1}: ${agChunk.length} chars, ~${agTokenCount} tokens`);
-                    await processChunkEmbedding(agChunk, `${chunk.title} - Part ${agIndex + 1}`, chunk.metadata, supabase, openaiApiKey, originalName);
-                    processedChunks++;
-                  }
-                  return;
-                }
-              }
-              
-              await processChunkEmbedding(chunk.content, chunk.title, chunk.metadata, supabase, openaiApiKey, originalName);
-              processedChunks++;
-              console.log(`✅ Processed chunk ${chunkIndex}/${chunks.length}`);
-              
-            } catch (error) {
-              console.error(`❌ Error processing chunk ${chunkIndex}:`, error.message);
-              throw new Error(`Chunk ${chunkIndex} processing failed: ${error.message}`);
-            }
-          })
-        );
-
-        // Progress update and job status update
-        const progress = Math.round((processedChunks / chunks.length) * 100);
-        console.log(`📊 Progress: ${processedChunks}/${chunks.length} chunks (${progress}%)`);
-        
-        // Update job progress
-        if (jobId) {
-          await supabase
-            .from('processing_jobs')
-            .update({ chunks_processed: processedChunks })
-            .eq('id', jobId);
-        }
-        
-        // Delay between batches to respect rate limits
-        if (i + batchSize < chunks.length) {
-          console.log('⏳ Waiting 2 seconds before next batch...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-        
-      } catch (batchError) {
-        console.error(`❌ Batch ${currentBatch} failed:`, batchError.message);
-        throw new Error(`Processing failed at batch ${currentBatch}: ${batchError.message}`);
-      }
     }
 
-    // Clean up - delete the uploaded file from storage
-    currentStep = 'cleanup';
-    console.log('🧹 Cleaning up uploaded file...');
+    const job = claimedJobs[0] as JobData
+    console.log('📄 Processing job:', job.id, 'for document:', job.job_data.document_id)
+
     try {
-      await supabase.storage.from('documents').remove([fileName]);
-      console.log('✅ File cleanup completed');
-    } catch (cleanupError) {
-      console.warn('⚠️ File cleanup failed (non-critical):', cleanupError.message);
-    }
-
-    const processingTime = (Date.now() - startTime) / 1000;
-    console.log(`🎉 Successfully processed ${processedChunks} chunks from ${originalName} in ${processingTime.toFixed(1)}s`);
-
-    // Mark job as completed
-    if (jobId) {
-      await supabase
+      // Update processing job status to 'parsing'
+      const { error: updateError } = await supabase
         .from('processing_jobs')
-        .update({
-          status: 'completed',
-          chunks_processed: processedChunks,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', jobId);
-    }
+        .update({ status: 'parsing' })
+        .eq('document_id', job.job_data.document_id)
 
-    console.log(`✅ Processing job ${jobId} completed successfully`);
-
-  } catch (error) {
-    const processingTime = (Date.now() - startTime) / 1000;
-    console.error(`💥 Background processing error at step '${currentStep}':`, error.message);
-    console.error('📊 Processing stats:', {
-      step: currentStep,
-      timeElapsed: `${processingTime.toFixed(1)}s`,
-      error: error.message
-    });
-    
-    // Mark job as failed
-    if (jobId) {
-      await supabase
-        .from('processing_jobs')
-        .update({
-          status: 'failed',
-          error_message: error.message,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', jobId);
-    }
-    
-    console.error(`❌ Processing job ${jobId} failed: ${error.message}`);
-  }
-}
-
-// Improved token counting utility with safety margins for legal text
-function estimateTokenCount(text: string): number {
-  // More conservative estimation for dense legal text
-  // Legal documents often have complex formatting and dense terminology
-  // Use 3.5 chars per token instead of 4 to add safety margin
-  return Math.ceil(text.length / 3.5);
-}
-
-// Enhanced chunk splitting with multiple strategies for oversized content
-function splitOversizedChunk(text: string, maxChars: number): string[] {
-  const chunks: string[] = [];
-  
-  // Strategy 1: Split by sentences (periods, exclamation marks, question marks)
-  const sentences = text.split(/[.!?]+\s+/);
-  let currentChunk = '';
-  
-  for (const sentence of sentences) {
-    if (sentence.trim().length === 0) continue;
-    
-    const sentenceWithPunct = sentence.trim() + '.';
-    
-    // If a single sentence is too large, split it further
-    if (sentenceWithPunct.length > maxChars) {
-      // Save current chunk if it exists
-      if (currentChunk) {
-        chunks.push(currentChunk.trim());
-        currentChunk = '';
+      if (updateError) {
+        throw new Error(`Failed to update job status: ${updateError.message}`)
       }
-      
-      // Strategy 2: Split long sentences by semicolons and commas
-      const subSentences = sentenceWithPunct.split(/[;,]\s+/);
-      let currentSubChunk = '';
-      
-      for (const subSentence of subSentences) {
-        if (subSentence.trim().length === 0) continue;
-        
-        if (currentSubChunk.length + subSentence.length <= maxChars) {
-          currentSubChunk += (currentSubChunk ? ', ' : '') + subSentence.trim();
-        } else {
-          if (currentSubChunk) {
-            chunks.push(currentSubChunk.trim());
-          }
-          
-          // Strategy 3: If still too large, split by character limit with word boundaries
-          if (subSentence.length > maxChars) {
-            const words = subSentence.split(/\s+/);
-            let wordChunk = '';
-            
-            for (const word of words) {
-              if (wordChunk.length + word.length + 1 <= maxChars) {
-                wordChunk += (wordChunk ? ' ' : '') + word;
-              } else {
-                if (wordChunk) {
-                  chunks.push(wordChunk.trim());
-                }
-                wordChunk = word;
-              }
-            }
-            
-            if (wordChunk) {
-              currentSubChunk = wordChunk;
-            } else {
-              currentSubChunk = '';
-            }
-          } else {
-            currentSubChunk = subSentence.trim();
-          }
-        }
-      }
-      
-      if (currentSubChunk) {
-        chunks.push(currentSubChunk.trim());
-      }
-      
-    } else if (currentChunk.length + sentenceWithPunct.length + 1 <= maxChars) {
-      currentChunk += (currentChunk ? ' ' : '') + sentenceWithPunct;
-    } else {
-      if (currentChunk) {
-        chunks.push(currentChunk.trim());
-      }
-      currentChunk = sentenceWithPunct;
-    }
-  }
-  
-  if (currentChunk.trim()) {
-    chunks.push(currentChunk.trim());
-  }
-  
-  // Fallback: if no chunks were created or the result is invalid, use character-based splitting
-  if (chunks.length === 0 || chunks.some(chunk => chunk.length > maxChars)) {
-    console.warn(`⚠️ Advanced splitting failed, using character-based fallback`);
-    const fallbackChunks: string[] = [];
-    for (let i = 0; i < text.length; i += maxChars) {
-      fallbackChunks.push(text.substring(i, i + maxChars));
-    }
-    return fallbackChunks;
-  }
-  
-  return chunks;
-}
 
-// Process individual chunk embedding and database insertion
-async function processChunkEmbedding(
-  content: string, 
-  title: string, 
-  metadata: Record<string, any>, 
-  supabase: any, 
-  openaiApiKey: string, 
-  originalName: string
-) {
-  // Generate embedding for this chunk with timeout
-  const embeddingController = new AbortController();
-  const embeddingTimeout = setTimeout(() => embeddingController.abort(), 30000); // 30 second timeout
-  
-  const embeddingResponse = await fetch('https://api.openai.com/v1/embeddings', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openaiApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'text-embedding-3-small',
-      input: content,
-      encoding_format: 'float',
-    }),
-    signal: embeddingController.signal,
-  });
-
-  clearTimeout(embeddingTimeout);
-
-  if (!embeddingResponse.ok) {
-    const errorText = await embeddingResponse.text();
-    throw new Error(`OpenAI API error ${embeddingResponse.status}: ${errorText}`);
-  }
-
-  const embeddingData = await embeddingResponse.json();
-  if (!embeddingData.data || !embeddingData.data[0] || !embeddingData.data[0].embedding) {
-    throw new Error('Invalid embedding response from OpenAI');
-  }
-  
-  const embedding = embeddingData.data[0].embedding;
-
-  // Insert chunk into database with retry logic
-  let insertSuccess = false;
-  let insertAttempts = 0;
-  const maxInsertAttempts = 3;
-  
-  while (!insertSuccess && insertAttempts < maxInsertAttempts) {
-    try {
-      const { error: insertError } = await supabase
+      // Download document from storage
+      console.log('📥 Downloading document from:', job.job_data.file_path)
+      const { data: fileData, error: downloadError } = await supabase.storage
         .from('documents')
-        .insert({
-          title: title,
-          content: content,
-          category: determineCategory(originalName, metadata),
-          embedding: JSON.stringify(embedding),
-        });
+        .download(job.job_data.file_path)
 
-      if (insertError) {
-        throw insertError;
+      if (downloadError) {
+        throw new Error(`Failed to download document: ${downloadError.message}`)
       }
-      
-      insertSuccess = true;
-    } catch (insertError) {
-      insertAttempts++;
-      console.warn(`⚠️ Insert attempt ${insertAttempts} failed:`, insertError.message);
-      
-      if (insertAttempts >= maxInsertAttempts) {
-        throw new Error(`Failed to insert chunk after ${maxInsertAttempts} attempts: ${insertError.message}`);
-      }
-      
-      // Wait before retry
-      await new Promise(resolve => setTimeout(resolve, 1000 * insertAttempts));
-    }
-  }
-}
 
-async function extractWithLlamaParse(arrayBuffer: ArrayBuffer, apiKey: string, fileName: string): Promise<string> {
-  const formData = new FormData();
-  const blob = new Blob([arrayBuffer], { type: 'application/pdf' });
-  formData.append('file', blob, fileName);
-  formData.append('result_type', 'markdown');
-  formData.append('verbose', 'true');
-
-  const response = await fetch('https://api.cloud.llamaindex.ai/api/parsing/upload', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error(`LlamaParse API error: ${response.statusText}`);
-  }
-
-  const result = await response.json();
-  const jobId = result.id;
-
-  // Poll for completion (reduced timeout for better stability)
-  let attempts = 0;
-  const maxAttempts = 12; // 2 minutes max (12 * 10s)
-  
-  while (attempts < maxAttempts) {
-    await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
-    
-    const statusResponse = await fetch(`https://api.cloud.llamaindex.ai/api/parsing/job/${jobId}`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
-    });
-
-    if (!statusResponse.ok) {
-      throw new Error(`LlamaParse status check failed: ${statusResponse.statusText}`);
-    }
-
-    const statusResult = await statusResponse.json();
-    
-    if (statusResult.status === 'SUCCESS') {
-      return statusResult.result.markdown || statusResult.result.text || '';
-    } else if (statusResult.status === 'ERROR') {
-      throw new Error(`LlamaParse processing failed: ${statusResult.error}`);
-    }
-    
-    attempts++;
-  }
-
-  throw new Error('LlamaParse processing timed out');
-}
-
-async function extractPdfBasic(arrayBuffer: ArrayBuffer): Promise<string> {
-  const decoder = new TextDecoder();
-  let text = decoder.decode(arrayBuffer);
-  
-  // Remove PDF headers, metadata, and clean up the text
-  text = text.replace(/[\x00-\x1F\x7F-\x9F]/g, ' ');
-  text = text.replace(/\s+/g, ' ');
-  text = text.trim();
-
-  if (!text || text.length < 100) {
-    // Try fallback extraction
-    return await extractPdfTextFallback(arrayBuffer);
-  }
-
-  return text;
-}
-
-// OCR extraction using OCR.Space API
-async function extractWithOCR(arrayBuffer: ArrayBuffer, apiKey: string, fileName: string): Promise<string> {
-  console.log('Starting OCR extraction with OCR.Space...');
-  
-  try {
-    // Convert ArrayBuffer to Blob
-    const fileBlob = new Blob([arrayBuffer], { type: 'application/pdf' });
-    
-    // Prepare form data for OCR.Space API
-    const formData = new FormData();
-    formData.append('file', fileBlob, fileName);
-    formData.append('apikey', apiKey);
-    formData.append('language', 'eng');
-    formData.append('isOverlayRequired', 'false');
-    formData.append('filetype', 'PDF');
-    formData.append('detectOrientation', 'true');
-    formData.append('isTable', 'true'); // Better for legal documents with structured content
-
-    console.log('Sending request to OCR.Space API...');
-    
-    const response = await fetch('https://api.ocr.space/parse/image', {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`OCR API request failed with status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    
-    if (result.IsErroredOnProcessing) {
-      throw new Error(`OCR processing error: ${result.ErrorMessage || 'Unknown error'}`);
-    }
-
-    if (!result.ParsedResults || result.ParsedResults.length === 0) {
-      throw new Error('No OCR results returned');
-    }
-
-    // Extract text from all pages
-    let extractedText = '';
-    for (const parsedResult of result.ParsedResults) {
-      if (parsedResult.ParsedText) {
-        extractedText += parsedResult.ParsedText + '\n\n';
-      }
-    }
-
-    console.log(`OCR extraction completed: ${extractedText.length} characters`);
-    return extractedText.trim();
-
-  } catch (error) {
-    console.error('OCR extraction error:', error);
-    throw error;
-  }
-}
-
-async function extractPdfTextFallback(arrayBuffer: ArrayBuffer): Promise<string> {
-  try {
-    const uint8Array = new Uint8Array(arrayBuffer);
-    let text = '';
-    
-    const decoder = new TextDecoder('utf-8', { fatal: false });
-    const pdfString = decoder.decode(uint8Array);
-    
-    // Basic regex to extract text between parentheses (common in PDFs)
-    const textMatches = pdfString.match(/\([^)]+\)/g);
-    if (textMatches) {
-      text = textMatches
-        .map(match => match.slice(1, -1)) // Remove parentheses
-        .filter(str => str.length > 3 && /[a-zA-Z]/.test(str)) // Filter meaningful text
-        .join(' ');
-    }
-
-    return text;
-  } catch (error) {
-    console.error('PDF fallback extraction failed:', error);
-    return '';
-  }
-}
-
-interface ChunkWithMetadata {
-  content: string;
-  title: string;
-  metadata: Record<string, any>;
-}
-
-function structureAwareChunking(text: string, chunkSize: number, overlap: number): ChunkWithMetadata[] {
-  const chunks: ChunkWithMetadata[] = [];
-  
-  // Hierarchy of separators for legal documents
-  const separators = [
-    '\n\n## ',      // Main sections
-    '\n\n### ',     // Subsections
-    '\n\n#### ',    // Sub-subsections
-    '\n\n',         // Paragraphs
-    '\n',           // Lines
-    '. ',           // Sentences
-    ' ',            // Words
-  ];
-
-  const textChunks = recursiveTextSplit(text, separators, chunkSize, overlap);
-  
-  // Extract metadata and create structured chunks
-  let currentSection = 'Document';
-  let chunkCounter = 1;
-
-  for (const chunk of textChunks) {
-    if (chunk.trim().length < 50) continue; // Skip very small chunks
-    
-    // Try to extract section headers for better titles
-    const lines = chunk.split('\n');
-    const firstLine = lines[0].trim();
-    
-    // Check if first line looks like a header
-    if (firstLine.match(/^#{1,4}\s+/) || firstLine.match(/^[A-Z][^.]*:?\s*$/)) {
-      currentSection = firstLine.replace(/^#{1,4}\s+/, '').trim();
-    }
-
-    const title = `${currentSection} - Part ${chunkCounter}`;
-    
-    chunks.push({
-      content: chunk.trim(),
-      title: title,
-      metadata: {
-        section: currentSection,
-        chunk_index: chunkCounter,
-        word_count: chunk.split(/\s+/).length,
-      }
-    });
-    
-    chunkCounter++;
-  }
-
-  return chunks;
-}
-
-function recursiveTextSplit(text: string, separators: string[], chunkSize: number, overlap: number): string[] {
-  if (separators.length === 0) {
-    return [text];
-  }
-
-  const [separator, ...restSeparators] = separators;
-  const splits = text.split(separator);
-  
-  if (splits.length === 1) {
-    // No split found, try next separator
-    return recursiveTextSplit(text, restSeparators, chunkSize, overlap);
-  }
-
-  const chunks: string[] = [];
-  let currentChunk = '';
-
-  for (let i = 0; i < splits.length; i++) {
-    const split = i === 0 ? splits[i] : separator + splits[i];
-    
-    if (currentChunk.length + split.length <= chunkSize) {
-      currentChunk += split;
-    } else {
-      if (currentChunk) {
-        chunks.push(currentChunk);
+      // Extract text content (basic implementation - can be enhanced with PDF parsing)
+      let extractedText = ''
+      try {
+        const arrayBuffer = await fileData.arrayBuffer()
+        const textDecoder = new TextDecoder('utf-8')
+        extractedText = textDecoder.decode(arrayBuffer)
         
-        // Handle overlap
-        if (overlap > 0 && currentChunk.length > overlap) {
-          currentChunk = currentChunk.slice(-overlap) + split;
-        } else {
-          currentChunk = split;
+        // Basic text cleanup
+        extractedText = extractedText.replace(/\0/g, '').trim()
+        
+        if (!extractedText) {
+          throw new Error('No text content could be extracted from the document')
         }
-      } else {
-        // Split is too large, recursively split it
-        const subChunks = recursiveTextSplit(split, restSeparators, chunkSize, overlap);
-        chunks.push(...subChunks);
+      } catch (parseError) {
+        throw new Error(`Failed to parse document content: ${parseError.message}`)
       }
+
+      // Update job status to 'chunking'
+      const { error: chunkingError } = await supabase
+        .from('processing_jobs')
+        .update({ status: 'chunking' })
+        .eq('document_id', job.job_data.document_id)
+
+      if (chunkingError) {
+        throw new Error(`Failed to update job status to chunking: ${chunkingError.message}`)
+      }
+
+      // Store parsed content in documents table
+      const { error: storeError } = await supabase
+        .from('documents')
+        .update({ 
+          parsed_content: extractedText,
+          ingestion_status: 'completed'
+        })
+        .eq('id', job.job_data.document_id)
+
+      if (storeError) {
+        throw new Error(`Failed to store parsed content: ${storeError.message}`)
+      }
+
+      // Mark job as completed
+      const { error: completeError } = await supabase.rpc('complete_job', {
+        p_job_id: job.id,
+        p_result: {
+          document_id: job.job_data.document_id,
+          content_length: extractedText.length,
+          processing_method: 'text_extraction'
+        }
+      })
+
+      if (completeError) {
+        throw new Error(`Failed to complete job: ${completeError.message}`)
+      }
+
+      // Update processing job status to 'completed'
+      const { error: finalUpdateError } = await supabase
+        .from('processing_jobs')
+        .update({ 
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          processing_method: 'text_extraction'
+        })
+        .eq('document_id', job.job_data.document_id)
+
+      if (finalUpdateError) {
+        console.error('⚠️ Warning: Failed to update final job status:', finalUpdateError)
+      }
+
+      console.log('✅ Successfully processed document:', job.job_data.document_id)
+      
+      return new Response(JSON.stringify({ 
+        success: true, 
+        job_id: job.id,
+        document_id: job.job_data.document_id,
+        content_length: extractedText.length
+      }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+
+    } catch (processingError) {
+      console.error('❌ Processing error:', processingError.message)
+      
+      // Mark job as failed with error message
+      const { error: failError } = await supabase.rpc('fail_job', {
+        p_job_id: job.id,
+        p_error_message: processingError.message
+      })
+
+      if (failError) {
+        console.error('❌ Failed to mark job as failed:', failError)
+      }
+
+      // Update processing job status to 'failed'
+      const { error: failUpdateError } = await supabase
+        .from('processing_jobs')
+        .update({ 
+          status: 'failed',
+          error_message: processingError.message,
+          completed_at: new Date().toISOString()
+        })
+        .eq('document_id', job.job_data.document_id)
+
+      if (failUpdateError) {
+        console.error('⚠️ Warning: Failed to update job status to failed:', failUpdateError)
+      }
+
+      return new Response(JSON.stringify({ 
+        error: processingError.message,
+        job_id: job.id
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
     }
-  }
 
-  if (currentChunk) {
-    chunks.push(currentChunk);
+  } catch (error) {
+    console.error('❌ Unexpected error:', error)
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
   }
-
-  return chunks.filter(chunk => chunk.trim().length > 0);
-}
-
-function determineCategory(fileName: string, metadata: Record<string, any>): string {
-  const lowerFileName = fileName.toLowerCase();
-  
-  if (lowerFileName.includes('statute') || lowerFileName.includes('mgl')) {
-    return 'statute';
-  } else if (lowerFileName.includes('case') || lowerFileName.includes('decision')) {
-    return 'case_law';
-  } else if (lowerFileName.includes('rule') || lowerFileName.includes('procedure')) {
-    return 'procedural_rule';
-  } else if (lowerFileName.includes('regulation') || lowerFileName.includes('cmr')) {
-    return 'regulation';
-  } else if (metadata.section && metadata.section.includes('Rule')) {
-    return 'procedural_rule';
-  } else {
-    return 'general';
-  }
-}
+})
