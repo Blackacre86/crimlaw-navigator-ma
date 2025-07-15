@@ -43,11 +43,11 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="h-full bg-background">
+    <div className="h-full" style={{ background: 'var(--gradient-subtle)' }}>
       <OnboardingWelcome />
       
       {/* Header */}
-      <div className="border-b border-border bg-card">
+      <div className="border-b border-border" style={{ background: 'var(--gradient-card)' }}>
         <div className="p-6">
           <h1 className="text-2xl font-bold text-foreground mb-2">Legal Research</h1>
           <p className="text-muted-foreground">

@@ -9,14 +9,14 @@ All colors MUST be HSL.
 @layer base {
   :root {
     /* LexInnova Professional Legal Theme */
-    --background: 0 0% 100%;
-    --foreground: 210 28% 17%;
+    --background: 213 60% 98%;
+    --foreground: 213 28% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 210 28% 17%;
+    --card-foreground: 213 28% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 210 28% 17%;
+    --popover-foreground: 213 28% 15%;
 
     /* LexInnova Deep Blue Primary (#0A2540) */
     --primary: 213 64% 15%;
@@ -26,21 +26,21 @@ All colors MUST be HSL.
     --accent-blue: 211 100% 50%;
     --accent-blue-foreground: 0 0% 100%;
     
-    /* LexInnova Professional grays */
-    --secondary: 210 14% 96%;
-    --secondary-foreground: 210 28% 17%;
+    /* LexInnova Professional grays with blue tint */
+    --secondary: 213 25% 96%;
+    --secondary-foreground: 213 28% 17%;
 
-    --muted: 210 14% 96%;
-    --muted-foreground: 210 15% 55%;
+    --muted: 213 25% 96%;
+    --muted-foreground: 213 20% 55%;
 
-    --accent: 210 45% 88%;
-    --accent-foreground: 210 28% 17%;
+    --accent: 213 35% 92%;
+    --accent-foreground: 213 28% 17%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 210 13% 91%;
-    --input: 210 13% 91%;
+    --border: 213 20% 91%;
+    --input: 213 20% 91%;
     --ring: 213 64% 15%;
 
     --radius: 0.75rem;
@@ -48,7 +48,9 @@ All colors MUST be HSL.
     /* LexInnova Professional gradients */
     --gradient-primary: linear-gradient(135deg, hsl(213 64% 15%), hsl(211 100% 50%));
     --gradient-hero: linear-gradient(135deg, hsl(213 64% 15%), hsl(213 60% 20%));
-    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(210 14% 98%));
+    --gradient-card: linear-gradient(145deg, hsl(213 60% 98%), hsl(213 25% 96%));
+    --gradient-background: linear-gradient(135deg, hsl(213 60% 98%), hsl(213 35% 96%));
+    --gradient-subtle: linear-gradient(180deg, hsl(213 60% 98%), hsl(213 40% 97%));
     
     /* Professional shadows with LexInnova blue tint */
     --shadow-elegant: 0 10px 25px -5px hsl(213 64% 15% / 0.1);
@@ -58,19 +60,19 @@ All colors MUST be HSL.
     /* Smooth transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 213 40% 96%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-foreground: 213 28% 20%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary: 213 64% 15%;
 
     --sidebar-primary-foreground: 0 0% 98%;
 
-    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent: 213 30% 90%;
 
-    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-accent-foreground: 213 64% 15%;
 
-    --sidebar-border: 220 13% 91%;
+    --sidebar-border: 213 20% 88%;
 
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
