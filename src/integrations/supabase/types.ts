@@ -63,31 +63,97 @@ export type Database = {
         Row: {
           category: string
           content: string
+          content_hash: string | null
           created_at: string
+          document_source: string | null
+          document_title: string | null
           embedding: string | null
+          file_path: string | null
           fts: unknown | null
           id: string
+          ingestion_status: string | null
           title: string
           updated_at: string
         }
         Insert: {
           category: string
           content: string
+          content_hash?: string | null
           created_at?: string
+          document_source?: string | null
+          document_title?: string | null
           embedding?: string | null
+          file_path?: string | null
           fts?: unknown | null
           id?: string
+          ingestion_status?: string | null
           title: string
           updated_at?: string
         }
         Update: {
           category?: string
           content?: string
+          content_hash?: string | null
           created_at?: string
+          document_source?: string | null
+          document_title?: string | null
           embedding?: string | null
+          file_path?: string | null
           fts?: unknown | null
           id?: string
+          ingestion_status?: string | null
           title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      job_queue: {
+        Row: {
+          claimed_at: string | null
+          claimed_by: string | null
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          job_data: Json
+          job_type: string
+          max_retries: number
+          next_retry_at: string | null
+          priority: number
+          retry_count: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          claimed_at?: string | null
+          claimed_by?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_data: Json
+          job_type: string
+          max_retries?: number
+          next_retry_at?: string | null
+          priority?: number
+          retry_count?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          claimed_at?: string | null
+          claimed_by?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_data?: Json
+          job_type?: string
+          max_retries?: number
+          next_retry_at?: string | null
+          priority?: number
+          retry_count?: number
+          status?: string
           updated_at?: string
         }
         Relationships: []
@@ -101,6 +167,7 @@ export type Database = {
           completed_at: string | null
           cost_estimate: number | null
           created_at: string
+          document_id: string | null
           document_name: string
           embed_ms: number | null
           embedding_time_ms: number | null
@@ -127,6 +194,7 @@ export type Database = {
           completed_at?: string | null
           cost_estimate?: number | null
           created_at?: string
+          document_id?: string | null
           document_name: string
           embed_ms?: number | null
           embedding_time_ms?: number | null
@@ -153,6 +221,7 @@ export type Database = {
           completed_at?: string | null
           cost_estimate?: number | null
           created_at?: string
+          document_id?: string | null
           document_name?: string
           embed_ms?: number | null
           embedding_time_ms?: number | null
@@ -171,7 +240,15 @@ export type Database = {
           updated_at?: string
           upload_ms?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "processing_jobs_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       processing_metrics: {
         Row: {
@@ -238,6 +315,31 @@ export type Database = {
       binary_quantize: {
         Args: { "": string } | { "": unknown }
         Returns: unknown
+      }
+      claim_next_job: {
+        Args: { p_worker_id: string; p_job_types?: string[] }
+        Returns: {
+          id: string
+          job_type: string
+          job_data: Json
+        }[]
+      }
+      complete_job: {
+        Args: { p_job_id: string; p_result?: Json }
+        Returns: boolean
+      }
+      enqueue_job: {
+        Args: {
+          p_job_type: string
+          p_job_data: Json
+          p_priority?: number
+          p_max_retries?: number
+        }
+        Returns: string
+      }
+      fail_job: {
+        Args: { p_job_id: string; p_error_message: string }
+        Returns: boolean
       }
       halfvec_avg: {
         Args: { "": number[] }
