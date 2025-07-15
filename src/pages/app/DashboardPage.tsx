@@ -182,9 +182,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">0.0s</div>
-              <p className="text-xs text-muted-foreground">
-                -0.3s improvement
-              </p>
+              <p className="text-xs text-muted-foreground">-0.0s improvement</p>
             </CardContent>
           </Card>
         </div>
