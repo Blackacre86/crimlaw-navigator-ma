@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_usage_logs: {
+        Row: {
+          api_provider: string
+          cost_estimate: number | null
+          created_at: string
+          endpoint: string
+          error_message: string | null
+          id: string
+          processing_job_id: string | null
+          request_tokens: number | null
+          response_time_ms: number | null
+          response_tokens: number | null
+          status_code: number | null
+          total_tokens: number | null
+        }
+        Insert: {
+          api_provider?: string
+          cost_estimate?: number | null
+          created_at?: string
+          endpoint: string
+          error_message?: string | null
+          id?: string
+          processing_job_id?: string | null
+          request_tokens?: number | null
+          response_time_ms?: number | null
+          response_tokens?: number | null
+          status_code?: number | null
+          total_tokens?: number | null
+        }
+        Update: {
+          api_provider?: string
+          cost_estimate?: number | null
+          created_at?: string
+          endpoint?: string
+          error_message?: string | null
+          id?: string
+          processing_job_id?: string | null
+          request_tokens?: number | null
+          response_time_ms?: number | null
+          response_tokens?: number | null
+          status_code?: number | null
+          total_tokens?: number | null
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           category: string
@@ -49,46 +94,94 @@ export type Database = {
       }
       processing_jobs: {
         Row: {
+          api_calls: number | null
+          chunk_size_avg: number | null
           chunks_processed: number | null
           completed_at: string | null
+          cost_estimate: number | null
           created_at: string
           document_name: string
+          embedding_time_ms: number | null
           error_message: string | null
           id: string
           original_name: string
           processing_method: string | null
+          processing_rate: number | null
           started_at: string | null
           status: string
+          token_count: number | null
           total_chunks: number | null
           updated_at: string
         }
         Insert: {
+          api_calls?: number | null
+          chunk_size_avg?: number | null
           chunks_processed?: number | null
           completed_at?: string | null
+          cost_estimate?: number | null
           created_at?: string
           document_name: string
+          embedding_time_ms?: number | null
           error_message?: string | null
           id?: string
           original_name: string
           processing_method?: string | null
+          processing_rate?: number | null
           started_at?: string | null
           status?: string
+          token_count?: number | null
           total_chunks?: number | null
           updated_at?: string
         }
         Update: {
+          api_calls?: number | null
+          chunk_size_avg?: number | null
           chunks_processed?: number | null
           completed_at?: string | null
+          cost_estimate?: number | null
           created_at?: string
           document_name?: string
+          embedding_time_ms?: number | null
           error_message?: string | null
           id?: string
           original_name?: string
           processing_method?: string | null
+          processing_rate?: number | null
           started_at?: string | null
           status?: string
+          token_count?: number | null
           total_chunks?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      processing_metrics: {
+        Row: {
+          created_at: string
+          id: string
+          metadata: Json | null
+          metric_type: string
+          metric_value: number
+          processing_job_id: string
+          timestamp: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          metric_type: string
+          metric_value: number
+          processing_job_id: string
+          timestamp?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          metric_type?: string
+          metric_value?: number
+          processing_job_id?: string
+          timestamp?: string
         }
         Relationships: []
       }
