@@ -169,9 +169,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">0</div>
-              <p className="text-xs text-muted-foreground">
-                +12% from yesterday
-              </p>
+              <p className="text-xs text-muted-foreground">+ 5% from yesterday</p>
             </CardContent>
           </Card>
 
