@@ -9,41 +9,43 @@ import { SearchResults } from '@/components/SearchResults';
 import { OnboardingWelcome } from '@/components/OnboardingWelcome';
 import { processAllDocuments } from '@/utils/documentProcessor';
 import { useToast } from '@/hooks/use-toast';
-
 export default function DashboardPage() {
-  const { toast } = useToast();
+  const {
+    toast
+  } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
-  
   const [searchState, setSearchState] = useState({
     query: '',
     isLoading: false,
     answer: null as string | null,
     sources: [] as any[],
-    error: null as string | null,
+    error: null as string | null
   });
-
   const handleSearch = (query: string, isLoading: boolean, answer: string | null, sources: any[], error: string | null) => {
-    setSearchState({ query, isLoading, answer, sources, error });
+    setSearchState({
+      query,
+      isLoading,
+      answer,
+      sources,
+      error
+    });
   };
-
   const handleProcessDocuments = async () => {
     setIsProcessing(true);
     toast({
       title: "Processing Documents",
-      description: "Starting document processing with legal chunking and embeddings...",
+      description: "Starting document processing with legal chunking and embeddings..."
     });
-    
     try {
       const result = await processAllDocuments();
-      
       if (result.success > 0) {
         toast({
           title: "Processing Complete",
-          description: `Successfully processed ${result.success} documents. ${result.failed > 0 ? `${result.failed} failed.` : ''}`,
+          description: `Successfully processed ${result.success} documents. ${result.failed > 0 ? `${result.failed} failed.` : ''}`
         });
       } else {
         toast({
-          title: "Processing Failed", 
+          title: "Processing Failed",
           description: `Failed to process documents. Check console for details.`,
           variant: "destructive"
         });
@@ -59,34 +61,31 @@ export default function DashboardPage() {
       setIsProcessing(false);
     }
   };
-
-  const recentSearches = [
-    {
-      id: 1,
-      query: 'Massachusetts criminal sentencing guidelines for assault charges',
-      timestamp: '2 hours ago',
-      results: 12
-    },
-    {
-      id: 2,
-      query: 'Fourth Amendment search and seizure precedents in Massachusetts',
-      timestamp: '1 day ago',
-      results: 8
-    },
-    {
-      id: 3,
-      query: 'Drug possession penalties and diversion programs',
-      timestamp: '2 days ago',
-      results: 15
-    }
-  ];
-
-  return (
-    <div className="h-full" style={{ background: 'var(--gradient-subtle)' }}>
+  const recentSearches = [{
+    id: 1,
+    query: 'Massachusetts criminal sentencing guidelines for assault charges',
+    timestamp: '2 hours ago',
+    results: 12
+  }, {
+    id: 2,
+    query: 'Fourth Amendment search and seizure precedents in Massachusetts',
+    timestamp: '1 day ago',
+    results: 8
+  }, {
+    id: 3,
+    query: 'Drug possession penalties and diversion programs',
+    timestamp: '2 days ago',
+    results: 15
+  }];
+  return <div className="h-full" style={{
+    background: 'var(--gradient-subtle)'
+  }}>
       <OnboardingWelcome />
       
       {/* Header */}
-      <div className="border-b border-border" style={{ background: 'var(--gradient-card)' }}>
+      <div className="border-b border-border" style={{
+      background: 'var(--gradient-card)'
+    }}>
         <div className="p-6">
           <h1 className="text-2xl font-bold text-foreground mb-2">Legal Research</h1>
           <p className="text-muted-foreground">
@@ -134,36 +133,21 @@ export default function DashboardPage() {
                 The Massachusetts legal documents are ready but need embedding generation to enable AI search. 
                 This will use the legal-optimized chunking strategy to preserve statute structure and citations.
               </p>
-              <Button 
-                onClick={handleProcessDocuments}
-                disabled={isProcessing}
-                className="w-full"
-                size="lg"
-              >
-                {isProcessing ? (
-                  <>
+              <Button onClick={handleProcessDocuments} disabled={isProcessing} className="w-full" size="lg">
+                {isProcessing ? <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Processing Documents...
-                  </>
-                ) : (
-                  <>
+                  </> : <>
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Generate Embeddings for Legal Documents
-                  </>
-                )}
+                  </>}
               </Button>
             </div>
           </CardContent>
         </Card>
 
         {/* Search Results */}
-        <SearchResults 
-          isLoading={searchState.isLoading}
-          answer={searchState.answer}
-          sources={searchState.sources}
-          error={searchState.error}
-          query={searchState.query}
-        />
+        <SearchResults isLoading={searchState.isLoading} answer={searchState.answer} sources={searchState.sources} error={searchState.error} query={searchState.query} />
 
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -173,7 +157,7 @@ export default function DashboardPage() {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2,847</div>
+              <div className="text-2xl font-bold">0</div>
               <p className="text-xs text-muted-foreground">
                 +73 from last month
               </p>
@@ -220,8 +204,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentSearches.map((search) => (
-                <div key={search.id} className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer">
+              {recentSearches.map(search => <div key={search.id} className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer">
                   <div className="flex-1">
                     <p className="font-medium text-foreground mb-1">{search.query}</p>
                     <div className="flex items-center space-x-4 text-sm text-muted-foreground">
@@ -237,8 +220,7 @@ export default function DashboardPage() {
                   <Button variant="ghost" size="sm" className="text-accent-blue hover:text-accent-blue/80">
                     View Results
                   </Button>
-                </div>
-              ))}
+                </div>)}
             </div>
           </CardContent>
         </Card>
@@ -276,6 +258,5 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
+    </div>;
 }
