@@ -59,9 +59,48 @@ export type Database = {
         }
         Relationships: []
       }
+      chunks: {
+        Row: {
+          chunk_index: number | null
+          content: string
+          created_at: string | null
+          document_id: string
+          embedding: string | null
+          id: number
+          metadata: Json | null
+        }
+        Insert: {
+          chunk_index?: number | null
+          content: string
+          created_at?: string | null
+          document_id: string
+          embedding?: string | null
+          id?: number
+          metadata?: Json | null
+        }
+        Update: {
+          chunk_index?: number | null
+          content?: string
+          created_at?: string | null
+          document_id?: string
+          embedding?: string | null
+          id?: number
+          metadata?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chunks_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           category: string
+          chunked: boolean | null
           content: string
           content_hash: string | null
           created_at: string
@@ -78,6 +117,7 @@ export type Database = {
         }
         Insert: {
           category: string
+          chunked?: boolean | null
           content: string
           content_hash?: string | null
           created_at?: string
@@ -94,6 +134,7 @@ export type Database = {
         }
         Update: {
           category?: string
+          chunked?: boolean | null
           content?: string
           content_hash?: string | null
           created_at?: string
@@ -411,6 +452,15 @@ export type Database = {
       l2_normalize: {
         Args: { "": string } | { "": unknown } | { "": unknown }
         Returns: unknown
+      }
+      match_chunks: {
+        Args: { query_embedding: string; match_count?: number }
+        Returns: {
+          id: number
+          content: string
+          metadata: Json
+          similarity: number
+        }[]
       }
       match_documents: {
         Args: {

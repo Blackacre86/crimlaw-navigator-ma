@@ -31,3 +31,6 @@ verify_jwt = false
 
 [functions.test-function]
 verify_jwt = false
+
+[functions.hybrid-search-chunks]
+verify_jwt = false
