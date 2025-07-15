@@ -9,7 +9,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Upload, FileText, CheckCircle, AlertCircle, Eye, Settings } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useToast, errorToast } from '@/hooks/use-toast';
+import { useErrorHandling } from '@/hooks/use-error-handling';
+import { ErrorDialog } from '@/components/ui/error-dialog';
+import { ErrorHistoryPanel } from '@/components/ErrorHistoryPanel';
 import ProcessingJobsTable from '@/components/ProcessingJobsTable';
 import ProcessingStats from '@/components/ProcessingStats';
 import { useProcessingJobs } from '@/hooks/useProcessingJobs';
@@ -21,6 +24,8 @@ export default function Admin() {
   const [status, setStatus] = useState('');
   const [progress, setProgress] = useState(0);
   const { toast } = useToast();
+  const { showError, selectedError, setSelectedError } = useErrorHandling();
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
   const { jobs, loading: jobsLoading, refreshJobs, stats } = useProcessingJobs();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -30,10 +35,15 @@ export default function Admin() {
       setStatus('');
       setProgress(0);
     } else {
-      toast({
-        title: "Invalid file type",
-        description: "Please select a PDF file.",
-        variant: "destructive",
+      showError({
+        title: "Invalid File Type",
+        message: "Please select a PDF file. Only PDF documents are supported for processing.",
+        component: "Admin",
+        action: "file_selection",
+        metadata: { 
+          selectedFileType: selectedFile?.type || 'unknown',
+          fileName: selectedFile?.name || 'unknown'
+        }
       });
     }
   };
@@ -56,6 +66,18 @@ export default function Admin() {
         .upload(fileName, file);
 
       if (uploadError) {
+        showError({
+          title: "Document Upload Failed",
+          message: `Failed to upload document to storage: ${uploadError.message}`,
+          component: "Admin",
+          action: "document_upload",
+          metadata: { 
+            fileName: file.name,
+            fileSize: file.size,
+            errorCode: uploadError.message,
+            storageError: uploadError
+          }
+        });
         throw uploadError;
       }
 
@@ -71,6 +93,17 @@ export default function Admin() {
       });
 
       if (error) {
+        showError({
+          title: "Document Processing Failed",
+          message: `Failed to start document processing: ${error.message}`,
+          component: "Admin",
+          action: "document_processing",
+          metadata: { 
+            fileName: file.name,
+            uploadedFileName: fileName,
+            processingError: error
+          }
+        });
         throw error;
       }
 
@@ -93,10 +126,17 @@ export default function Admin() {
     } catch (error: any) {
       console.error('Error processing document:', error);
       setStatus('Error processing document. Please try again.');
-      toast({
-        title: "Processing failed",
-        description: error.message || "An error occurred while processing the document.",
-        variant: "destructive",
+      showError({
+        title: "Document Processing Error",
+        message: error.message || "An unexpected error occurred while processing the document. Please try again or contact support if the issue persists.",
+        component: "Admin",
+        action: "upload_process",
+        metadata: { 
+          fileName: file?.name,
+          errorType: error.constructor?.name || 'Unknown',
+          errorStack: error.stack,
+          timestamp: new Date().toISOString()
+        }
       });
     } finally {
       setUploading(false);
@@ -203,6 +243,11 @@ export default function Admin() {
           />
         </div>
 
+        {/* Error History Panel */}
+        <div className="mb-6">
+          <ErrorHistoryPanel />
+        </div>
+
         <Card className="mb-6">
           <CardHeader>
             <CardTitle>Enhanced RAG Pipeline Status</CardTitle>
@@ -257,10 +302,15 @@ export default function Admin() {
                     
                     if (error) {
                       setStatus(`❌ Test failed: ${error.message}`);
-                      toast({
-                        title: "Test failed",
-                        description: error.message,
-                        variant: "destructive",
+                      showError({
+                        title: "Edge Function Test Failed",
+                        message: `The test function call failed: ${error.message}. Please check the Edge Function configuration and connectivity.`,
+                        component: "Admin",
+                        action: "test_edge_function",
+                        metadata: { 
+                          functionName: 'test-function',
+                          errorDetails: error
+                        }
                       });
                     } else {
                       setStatus(`✅ Test successful! Function responded at ${data.timestamp}`);
@@ -271,10 +321,16 @@ export default function Admin() {
                     }
                   } catch (error: any) {
                     setStatus(`❌ Test error: ${error.message}`);
-                    toast({
-                      title: "Test error",
-                      description: error.message,
-                      variant: "destructive",
+                    showError({
+                      title: "Test Connection Error",
+                      message: `An unexpected error occurred while testing Edge Functions: ${error.message}. This may indicate a network connectivity issue or service interruption.`,
+                      component: "Admin",
+                      action: "test_connection",
+                      metadata: { 
+                        errorType: error.constructor?.name || 'Unknown',
+                        errorStack: error.stack,
+                        timestamp: new Date().toISOString()
+                      }
                     });
                   }
                 }}
@@ -400,6 +456,13 @@ export default function Admin() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Error Dialog */}
+      <ErrorDialog
+        open={showErrorDialog}
+        onOpenChange={setShowErrorDialog}
+        error={selectedError}
+      />
     </div>
   );
 }

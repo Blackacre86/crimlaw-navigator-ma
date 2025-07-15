@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -8,6 +8,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RefreshCw, Clock, CheckCircle, XCircle, AlertTriangle, Eye, Trash2, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useErrorHandling } from '@/hooks/use-error-handling';
+import { ErrorDialog } from '@/components/ui/error-dialog';
 import { Tables } from '@/integrations/supabase/types';
 
 type ProcessingJob = Tables<'processing_jobs'>;
@@ -20,6 +22,8 @@ interface ProcessingJobsTableProps {
 
 export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }: ProcessingJobsTableProps) {
   const { toast } = useToast();
+  const { showError, selectedError, setSelectedError } = useErrorHandling();
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -81,10 +85,17 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
 
       onRefresh();
     } catch (error: any) {
-      toast({
-        title: "Retry failed",
-        description: error.message || "Failed to retry processing",
-        variant: "destructive",
+      showError({
+        title: "Job Retry Failed",
+        message: `Failed to retry processing job: ${error.message || 'Unknown error occurred'}`,
+        component: "ProcessingJobsTable",
+        action: "retry_job",
+        metadata: { 
+          jobId: job.id,
+          documentName: job.document_name,
+          originalName: job.original_name,
+          errorDetails: error
+        }
       });
     }
   };
@@ -109,10 +120,17 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
 
       onRefresh();
     } catch (error: any) {
-      toast({
-        title: "Delete failed",
-        description: error.message || "Failed to delete processing job",
-        variant: "destructive",
+      showError({
+        title: "Job Deletion Failed",
+        message: `Failed to delete processing job: ${error.message || 'Unknown error occurred'}`,
+        component: "ProcessingJobsTable",
+        action: "delete_job",
+        metadata: { 
+          jobId: job.id,
+          documentName: job.document_name,
+          originalName: job.original_name,
+          errorDetails: error
+        }
       });
     }
   };
@@ -266,12 +284,28 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            toast({
-                              title: "Error Details",
-                              description: job.error_message,
-                              variant: "destructive",
+                            setSelectedError({
+                              id: job.id,
+                              title: `Processing Error - ${job.original_name}`,
+                              message: job.error_message || 'Unknown error occurred',
+                              timestamp: new Date(job.created_at),
+                              component: "ProcessingJobsTable",
+                              action: "view_job_error",
+                              metadata: {
+                                jobId: job.id,
+                                documentName: job.document_name,
+                                originalName: job.original_name,
+                                status: job.status,
+                                processingMethod: job.processing_method,
+                                chunksProcessed: job.chunks_processed,
+                                totalChunks: job.total_chunks,
+                                startedAt: job.started_at,
+                                completedAt: job.completed_at
+                              }
                             });
+                            setShowErrorDialog(true);
                           }}
+                          title="View error details"
                         >
                           <AlertTriangle className="h-3 w-3" />
                         </Button>
@@ -293,6 +327,13 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
           </Table>
         </div>
       </CardContent>
+      
+      {/* Error Dialog */}
+      <ErrorDialog
+        open={showErrorDialog}
+        onOpenChange={setShowErrorDialog}
+        error={selectedError}
+      />
     </Card>
   );
 }

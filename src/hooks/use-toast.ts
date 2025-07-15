@@ -5,7 +5,7 @@ import type {
   ToastProps,
 } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
+const TOAST_LIMIT = 3
 const TOAST_REMOVE_DELAY = 1000000
 
 type ToasterToast = ToastProps & {
@@ -149,12 +149,16 @@ function toast({ ...props }: Toast) {
     })
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
+  // For error toasts, make them persistent unless explicitly set
+  const isPersistent = props.variant === "destructive" && props.duration === undefined
+
   dispatch({
     type: "ADD_TOAST",
     toast: {
       ...props,
       id,
       open: true,
+      duration: isPersistent ? Infinity : props.duration,
       onOpenChange: (open) => {
         if (!open) dismiss()
       },
@@ -166,6 +170,23 @@ function toast({ ...props }: Toast) {
     dismiss,
     update,
   }
+}
+
+// Enhanced error toast function
+function errorToast({ title = "Error", message, ...props }: { 
+  title?: string
+  message: string
+  component?: string
+  action?: string
+  metadata?: Record<string, any>
+} & Partial<Toast>) {
+  return toast({
+    title,
+    description: message,
+    variant: "destructive",
+    duration: Infinity, // Make persistent
+    ...props,
+  })
 }
 
 function useToast() {
@@ -188,4 +209,4 @@ function useToast() {
   }
 }
 
-export { useToast, toast }
+export { useToast, toast, errorToast }
