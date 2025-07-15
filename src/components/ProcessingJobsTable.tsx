@@ -106,31 +106,43 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
     }
 
     try {
+      console.log('Attempting to delete job:', job.id, 'with document:', job.document_name);
+      
       // First try to delete the file from storage if it exists
       const { error: storageError } = await supabase.storage
         .from('documents')
         .remove([job.document_name]);
 
-      // Don't throw on storage error since the file might not exist or might have been cleaned up
       if (storageError) {
-        console.warn('File not found in storage or already deleted:', storageError.message);
+        console.log('Storage deletion result:', storageError.message);
+      } else {
+        console.log('File deleted from storage successfully');
       }
 
       // Delete the processing job record
-      const { error } = await supabase
+      const { error: dbError } = await supabase
         .from('processing_jobs')
         .delete()
         .eq('id', job.id);
 
-      if (error) throw error;
+      if (dbError) {
+        console.error('Database deletion error:', dbError);
+        throw dbError;
+      }
+
+      console.log('Database record deleted successfully');
 
       toast({
         title: "Job deleted",
         description: `Processing job for "${job.original_name}" has been deleted.`,
       });
 
-      // Force refresh the jobs list
-      setTimeout(onRefresh, 500);
+      // Force refresh immediately and again after a delay
+      onRefresh();
+      setTimeout(() => {
+        console.log('Triggering delayed refresh');
+        onRefresh();
+      }, 1000);
     } catch (error: any) {
       showError({
         title: "Job Deletion Failed",

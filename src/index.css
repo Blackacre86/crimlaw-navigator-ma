@@ -45,12 +45,12 @@ All colors MUST be HSL.
 
     --radius: 0.75rem;
     
-    /* LexInnova Professional gradients */
+    /* LexInnova Professional gradients - Enhanced for better visibility */
     --gradient-primary: linear-gradient(135deg, hsl(213 64% 15%), hsl(211 100% 50%));
     --gradient-hero: linear-gradient(135deg, hsl(213 64% 15%), hsl(213 60% 20%));
-    --gradient-card: linear-gradient(145deg, hsl(213 60% 98%), hsl(213 25% 96%));
-    --gradient-background: linear-gradient(135deg, hsl(213 60% 98%), hsl(213 35% 96%));
-    --gradient-subtle: linear-gradient(180deg, hsl(213 60% 98%), hsl(213 40% 97%));
+    --gradient-card: linear-gradient(145deg, hsl(213 40% 94%), hsl(213 35% 90%));
+    --gradient-background: linear-gradient(135deg, hsl(213 50% 94%), hsl(213 45% 88%));
+    --gradient-subtle: linear-gradient(180deg, hsl(213 45% 92%), hsl(213 40% 88%));
     
     /* Professional shadows with LexInnova blue tint */
     --shadow-elegant: 0 10px 25px -5px hsl(213 64% 15% / 0.1);

@@ -32,7 +32,7 @@ export default function AppLayout() {
   const isAdmin = profile?.role === 'admin';
 
   return (
-    <div className="h-screen flex bg-gradient-background">
+    <div className="h-screen flex" style={{ background: 'var(--gradient-background)' }}>
       {/* Left Sidebar */}
       <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col`}>
         {/* Logo */}
