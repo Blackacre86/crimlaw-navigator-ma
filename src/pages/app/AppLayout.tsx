@@ -15,7 +15,8 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageSquare,
-  Sparkles
+  Sparkles,
+  BarChart3
 } from 'lucide-react';
 
 export default function AppLayout() {
@@ -84,6 +85,20 @@ export default function AppLayout() {
                   </span>
                 </div>
                 <NavLink
+                  to="/admin/dashboard"
+                  className={({ isActive }) =>
+                    `flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    }`
+                  }
+                >
+                  <BarChart3 className="h-5 w-5" />
+                  <span>Analytics Dashboard</span>
+                  <Badge variant="secondary" className="ml-auto text-xs">Admin</Badge>
+                </NavLink>
+                <NavLink
                   to="/admin"
                   className={({ isActive }) =>
                     `flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
@@ -95,25 +110,39 @@ export default function AppLayout() {
                 >
                   <Settings className="h-5 w-5" />
                   <span>Document Management</span>
-                  <Badge variant="secondary" className="ml-auto text-xs">Admin</Badge>
                 </NavLink>
               </div>
             )}
             
             {isAdmin && sidebarCollapsed && (
-              <NavLink
-                to="/admin"
-                className={({ isActive }) =>
-                  `flex items-center justify-center px-3 py-2 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                      : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                  }`
-                }
-                title="Admin Dashboard"
-              >
-                <Settings className="h-5 w-5" />
-              </NavLink>
+              <div className="space-y-2">
+                <NavLink
+                  to="/admin/dashboard"
+                  className={({ isActive }) =>
+                    `flex items-center justify-center px-3 py-2 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    }`
+                  }
+                  title="Analytics Dashboard"
+                >
+                  <BarChart3 className="h-5 w-5" />
+                </NavLink>
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) =>
+                    `flex items-center justify-center px-3 py-2 rounded-lg transition-colors ${
+                      isActive
+                        ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    }`
+                  }
+                  title="Document Management"
+                >
+                  <Settings className="h-5 w-5" />
+                </NavLink>
+              </div>
             )}
           </div>
         </nav>
