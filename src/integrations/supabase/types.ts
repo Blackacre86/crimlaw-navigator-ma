@@ -100,52 +100,64 @@ export type Database = {
       documents: {
         Row: {
           category: string
+          chunk_count: number | null
           chunked: boolean | null
-          content: string
+          content: string | null
           content_hash: string | null
           created_at: string
           document_source: string | null
           document_title: string | null
           embedding: string | null
+          error_message: string | null
           file_path: string | null
           fts: unknown | null
           id: string
           ingestion_status: string | null
           parsed_content: string | null
+          processing_completed_at: string | null
+          processing_started_at: string | null
           title: string
           updated_at: string
         }
         Insert: {
           category: string
+          chunk_count?: number | null
           chunked?: boolean | null
-          content: string
+          content?: string | null
           content_hash?: string | null
           created_at?: string
           document_source?: string | null
           document_title?: string | null
           embedding?: string | null
+          error_message?: string | null
           file_path?: string | null
           fts?: unknown | null
           id?: string
           ingestion_status?: string | null
           parsed_content?: string | null
+          processing_completed_at?: string | null
+          processing_started_at?: string | null
           title: string
           updated_at?: string
         }
         Update: {
           category?: string
+          chunk_count?: number | null
           chunked?: boolean | null
-          content?: string
+          content?: string | null
           content_hash?: string | null
           created_at?: string
           document_source?: string | null
           document_title?: string | null
           embedding?: string | null
+          error_message?: string | null
           file_path?: string | null
           fts?: unknown | null
           id?: string
           ingestion_status?: string | null
           parsed_content?: string | null
+          processing_completed_at?: string | null
+          processing_started_at?: string | null
           title?: string
           updated_at?: string
         }

@@ -9,6 +9,7 @@ import { SearchResults } from '@/components/SearchResults';
 import { OnboardingWelcome } from '@/components/OnboardingWelcome';
 import { processAllDocuments } from '@/utils/documentProcessor';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 export default function DashboardPage() {
   const {
     toast
@@ -32,30 +33,50 @@ export default function DashboardPage() {
   };
   const handleProcessDocuments = async () => {
     setIsProcessing(true);
-    toast({
-      title: "Processing Documents",
-      description: "Starting document processing with legal chunking and embeddings..."
-    });
+    
     try {
+      // First, reset any stuck documents
+      const { error: resetError } = await supabase
+        .from('documents')
+        .update({ 
+          chunked: false, 
+          ingestion_status: 'pending',
+          error_message: null 
+        })
+        .in('ingestion_status', ['failed', 'processing'])
+        .or('chunked.eq.true,chunk_count.eq.0');
+      
+      if (resetError) {
+        console.error('Reset error:', resetError);
+      }
+      
+      // Process all pending documents
       const result = await processAllDocuments();
+      
       if (result.success > 0) {
         toast({
           title: "Processing Complete",
-          description: `Successfully processed ${result.success} documents. ${result.failed > 0 ? `${result.failed} failed.` : ''}`
-        });
-      } else {
-        toast({
-          title: "Processing Failed",
-          description: `Failed to process documents. Check console for details.`,
-          variant: "destructive"
+          description: `Successfully processed ${result.success} document(s)`,
         });
       }
+      
+      if (result.failed > 0) {
+        toast({
+          title: "Some documents failed",
+          description: `${result.failed} document(s) failed to process`,
+          variant: "destructive",
+        });
+      }
+      
+      // Refresh the page data
+      window.location.reload();
+      
     } catch (error) {
-      console.error('Error in document processing:', error);
+      console.error('Processing error:', error);
       toast({
-        title: "Processing Error",
-        description: "An unexpected error occurred during processing.",
-        variant: "destructive"
+        title: "Processing Failed",
+        description: "An error occurred while processing documents",
+        variant: "destructive",
       });
     } finally {
       setIsProcessing(false);

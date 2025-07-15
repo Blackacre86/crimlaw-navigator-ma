@@ -1,85 +1,44 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import * as pdfParse from 'https://esm.sh/pdf-parse@1.1.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface ChunkData {
-  content: string;
-  metadata?: Record<string, any>;
-  chunk_index: number;
-}
-
 serve(async (req) => {
-  console.log('🚀 Process-document function started at:', new Date().toISOString());
+  console.log('🚀 Process-document function started');
 
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Health check for GET requests
-  if (req.method === 'GET') {
-    return new Response(JSON.stringify({ 
-      status: 'healthy', 
-      service: 'process-document',
-      timestamp: new Date().toISOString() 
-    }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-    });
-  }
-
   try {
-    // Get environment variables
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
 
-    console.log('🔑 Environment check:', {
-      hasSupabaseUrl: !!supabaseUrl,
-      hasServiceKey: !!supabaseServiceKey,
-      hasOpenAIKey: !!openaiApiKey
-    });
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-      throw new Error('Missing Supabase credentials');
+    if (!supabaseUrl || !supabaseServiceKey || !openaiApiKey) {
+      throw new Error('Missing required environment variables');
     }
 
-    if (!openaiApiKey) {
-      throw new Error('Missing OpenAI API key');
-    }
-
-    // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Parse request body
     const { documentId } = await req.json();
-    console.log('📄 Processing document ID:', documentId);
 
-    if (!documentId) {
-      return new Response(JSON.stringify({ error: 'documentId is required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
+    console.log('📄 Processing document:', documentId);
 
-    // Update document status to processing
-    console.log('🔄 Updating document status to processing...');
-    const { error: statusUpdateError } = await supabase
+    // Update status to processing
+    await supabase
       .from('documents')
-      .update({ ingestion_status: 'processing' })
+      .update({ 
+        ingestion_status: 'processing',
+        processing_started_at: new Date().toISOString()
+      })
       .eq('id', documentId);
 
-    if (statusUpdateError) {
-      console.error('❌ Failed to update document status:', statusUpdateError);
-      throw new Error(`Failed to update document status: ${statusUpdateError.message}`);
-    }
-
-    // Fetch document from database
-    console.log('📥 Fetching document from database...');
+    // Fetch document
     const { data: document, error: fetchError } = await supabase
       .from('documents')
       .select('*')
@@ -87,140 +46,154 @@ serve(async (req) => {
       .single();
 
     if (fetchError || !document) {
-      console.error('❌ Failed to fetch document:', fetchError);
-      throw new Error(`Document not found: ${fetchError?.message || 'Document does not exist'}`);
+      throw new Error('Document not found');
     }
 
-    console.log('📋 Document found:', { 
-      id: document.id, 
-      title: document.title,
-      contentLength: document.content?.length || 0,
-      hasContent: !!document.content
-    });
+    let textContent = document.content;
 
-    // Use existing content if available, otherwise throw error
-    if (!document.content) {
-      throw new Error('Document has no content to process');
+    // If no content exists, extract from PDF
+    if (!textContent && document.file_path) {
+      console.log('📑 Extracting text from PDF...');
+      
+      // Download PDF from storage
+      const { data: fileData, error: downloadError } = await supabase.storage
+        .from('documents')
+        .download(document.file_path);
+
+      if (downloadError || !fileData) {
+        throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+      }
+
+      // Convert blob to buffer
+      const arrayBuffer = await fileData.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // Extract text using pdf-parse
+      try {
+        const pdfData = await pdfParse.default(buffer);
+        textContent = pdfData.text;
+        
+        console.log(`✅ Extracted ${textContent.length} characters from ${pdfData.numpages} pages`);
+
+        // Store extracted content back to document
+        await supabase
+          .from('documents')
+          .update({ content: textContent })
+          .eq('id', documentId);
+
+      } catch (pdfError) {
+        console.error('❌ PDF parsing error:', pdfError);
+        throw new Error(`PDF parsing failed: ${pdfError.message}`);
+      }
     }
 
-    const content = document.content;
-    console.log('📝 Content to process:', content.length, 'characters');
+    if (!textContent || textContent.trim().length === 0) {
+      throw new Error('No text content to process');
+    }
 
-    // Chunk the content into smaller pieces
-    console.log('🔪 Starting content chunking...');
-    const chunks = chunkText(content);
-    console.log('📊 Created', chunks.length, 'chunks');
+    // Delete any existing chunks for this document (clean slate)
+    await supabase
+      .from('chunks')
+      .delete()
+      .eq('document_id', documentId);
 
-    // Process chunks in batches to avoid rate limits
-    const batchSize = 10;
-    const processedChunks: any[] = [];
+    // Legal document chunking
+    console.log('🔪 Chunking with legal optimization...');
+    const chunks = chunkLegalText(textContent);
+    console.log(`📊 Created ${chunks.length} chunks`);
+
+    // Process chunks in batches
+    const batchSize = 5;
+    const processedChunks = [];
 
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize);
-      console.log(`🔄 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(chunks.length / batchSize)} (${batch.length} chunks)...`);
+      console.log(`🔄 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(chunks.length/batchSize)}`);
 
       const batchPromises = batch.map(async (chunk, batchIndex) => {
         const chunkIndex = i + batchIndex;
+        const embedding = await generateEmbedding(chunk.content, openaiApiKey);
         
-        try {
-          // Generate embedding for this chunk
-          console.log(`🧠 Generating embedding for chunk ${chunkIndex + 1}...`);
-          const embedding = await generateEmbedding(chunk.content, openaiApiKey);
-          
-          return {
-            document_id: documentId,
-            content: chunk.content,
-            embedding: JSON.stringify(embedding),
-            metadata: {
-              title: document.title,
-              chunk_index: chunkIndex,
-              word_count: chunk.content.split(' ').length,
-              char_count: chunk.content.length
-            },
-            chunk_index: chunkIndex
-          };
-        } catch (error) {
-          console.error(`❌ Failed to process chunk ${chunkIndex + 1}:`, error);
-          throw error;
-        }
+        return {
+          document_id: documentId,
+          content: chunk.content,
+          embedding: JSON.stringify(embedding),
+          metadata: {
+            ...chunk.metadata,
+            chunk_index: chunkIndex,
+            title: document.title || document.document_title
+          },
+          chunk_index: chunkIndex
+        };
       });
 
       const batchResults = await Promise.all(batchPromises);
       processedChunks.push(...batchResults);
       
-      // Add a small delay between batches to respect rate limits
+      // Rate limit protection
       if (i + batchSize < chunks.length) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
-    // Store all chunks in database
-    console.log('💾 Storing', processedChunks.length, 'chunks in database...');
+    // Insert all chunks
     const { error: insertError } = await supabase
       .from('chunks')
       .insert(processedChunks);
 
     if (insertError) {
-      console.error('❌ Failed to insert chunks:', insertError);
-      throw new Error(`Failed to store chunks: ${insertError.message}`);
+      throw new Error(`Failed to insert chunks: ${insertError.message}`);
     }
 
-    // Update document status to completed and mark as chunked
-    console.log('✅ Updating document status to completed...');
-    const { error: finalUpdateError } = await supabase
+    // Update document status
+    await supabase
       .from('documents')
       .update({ 
         ingestion_status: 'completed',
         chunked: true,
+        chunk_count: processedChunks.length,
+        processing_completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
       .eq('id', documentId);
 
-    if (finalUpdateError) {
-      console.error('❌ Failed to update final document status:', finalUpdateError);
-      throw new Error(`Failed to update document status: ${finalUpdateError.message}`);
-    }
-
-    console.log('🎉 Successfully processed document:', documentId);
+    console.log('✅ Successfully processed document');
 
     return new Response(JSON.stringify({
       success: true,
       documentId,
-      chunksCreated: processedChunks.length,
-      message: 'Document processed successfully'
+      chunksCreated: processedChunks.length
     }), {
-      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('❌ Error processing document:', error);
+    console.error('❌ Processing error:', error);
 
-    // Try to update document status to failed if we have a documentId
+    // Update status to failed
     try {
       const { documentId } = await req.json().catch(() => ({}));
       if (documentId) {
         const supabaseUrl = Deno.env.get('SUPABASE_URL');
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-        
         if (supabaseUrl && supabaseServiceKey) {
           const supabase = createClient(supabaseUrl, supabaseServiceKey);
           await supabase
             .from('documents')
             .update({ 
               ingestion_status: 'failed',
-              updated_at: new Date().toISOString()
+              error_message: error.message,
+              processing_completed_at: new Date().toISOString()
             })
             .eq('id', documentId);
         }
       }
-    } catch (updateError) {
-      console.error('⚠️ Failed to update document status to failed:', updateError);
+    } catch (e) {
+      console.error('Failed to update error status:', e);
     }
 
     return new Response(JSON.stringify({
-      error: error.message || 'Unknown error occurred',
-      details: error.toString()
+      error: error.message
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -228,87 +201,77 @@ serve(async (req) => {
   }
 });
 
-// Function to chunk text using legal document chunking strategy
-function chunkText(text: string, maxChunkSize = 3200, overlap = 200): ChunkData[] {
-  console.log('🔧 Using legal-optimized chunking strategy');
+function chunkLegalText(text, maxSize = 2500, overlap = 200) {
+  const chunks = [];
   
-  // Legal document chunking that preserves structure
-  const chunks: ChunkData[] = [];
+  // First, try to split by major sections
+  const sectionRegex = /(?:^|\n)(?:RULE|SECTION|CHAPTER|PART|ARTICLE|§)\s*[\d\w\.\-]+[^\n]*/gim;
+  const sections = text.split(sectionRegex);
   
-  // First try to split by sections/headers (legal structure preservation)
-  const sectionPattern = /(?:\n\s*(?:SECTION|RULE|CHAPTER|PART|§)\s*[\d\w\.]+[^\n]*\n)/gi;
-  const sections = text.split(sectionPattern);
+  let currentChunk = '';
+  let chunkMetadata = { type: 'legal_section' };
   
-  let chunkIndex = 0;
-  
-  for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-    let section = sections[sectionIndex].trim();
+  for (const section of sections) {
+    const trimmedSection = section.trim();
+    if (!trimmedSection) continue;
     
-    if (!section) continue;
-    
-    // If section is small enough, make it one chunk
-    if (section.length <= maxChunkSize) {
-      chunks.push({
-        content: section,
-        chunk_index: chunkIndex++,
-        metadata: {
-          section_index: sectionIndex,
-          word_count: section.split(' ').length,
-          char_count: section.length,
-          chunk_type: 'legal_section'
-        }
-      });
-    } else {
-      // Split large sections by paragraphs, preserving legal context
-      const paragraphs = section.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-      let currentChunk = '';
-      
-      for (const paragraph of paragraphs) {
-        const trimmedParagraph = paragraph.trim();
-        
-        if (currentChunk.length + trimmedParagraph.length > maxChunkSize && currentChunk.length > 0) {
-          chunks.push({
-            content: currentChunk.trim(),
-            chunk_index: chunkIndex++,
-            metadata: {
-              section_index: sectionIndex,
-              word_count: currentChunk.trim().split(' ').length,
-              char_count: currentChunk.trim().length,
-              chunk_type: 'legal_paragraph_group'
-            }
-          });
-          
-          // Start new chunk with some overlap
-          const sentences = currentChunk.trim().split(/[.!?]+/).filter(s => s.trim().length > 0);
-          const overlapSentences = sentences.slice(-2); // Keep last 2 sentences for context
-          currentChunk = overlapSentences.join('. ') + (overlapSentences.length > 0 ? '. ' : '') + trimmedParagraph;
-        } else {
-          currentChunk += (currentChunk ? '\n\n' : '') + trimmedParagraph;
-        }
-      }
-      
-      // Add final chunk from this section
-      if (currentChunk.trim().length > 0) {
+    // If section fits in one chunk
+    if (trimmedSection.length <= maxSize) {
+      if (currentChunk && (currentChunk.length + trimmedSection.length > maxSize)) {
+        // Save current chunk
         chunks.push({
           content: currentChunk.trim(),
-          chunk_index: chunkIndex++,
-          metadata: {
-            section_index: sectionIndex,
-            word_count: currentChunk.trim().split(' ').length,
-            char_count: currentChunk.trim().length,
-            chunk_type: 'legal_paragraph_group'
-          }
+          metadata: chunkMetadata
         });
+        currentChunk = trimmedSection;
+      } else {
+        currentChunk += (currentChunk ? '\n\n' : '') + trimmedSection;
+      }
+    } else {
+      // Section too large, split by paragraphs
+      if (currentChunk) {
+        chunks.push({
+          content: currentChunk.trim(),
+          metadata: chunkMetadata
+        });
+        currentChunk = '';
+      }
+      
+      // Split large section by paragraphs
+      const paragraphs = trimmedSection.split(/\n\s*\n/);
+      
+      for (const para of paragraphs) {
+        if (para.trim().length === 0) continue;
+        
+        if (currentChunk.length + para.length > maxSize && currentChunk) {
+          chunks.push({
+            content: currentChunk.trim(),
+            metadata: { type: 'legal_paragraph' }
+          });
+          
+          // Add overlap from previous chunk
+          const sentences = currentChunk.split(/[.!?]+/);
+          const overlapText = sentences.slice(-2).join('. ');
+          currentChunk = overlapText + (overlapText ? '. ' : '') + para.trim();
+        } else {
+          currentChunk += (currentChunk ? '\n\n' : '') + para.trim();
+        }
       }
     }
   }
   
-  console.log(`📊 Legal chunking created ${chunks.length} chunks with preserved structure`);
+  // Don't forget the last chunk
+  if (currentChunk.trim()) {
+    chunks.push({
+      content: currentChunk.trim(),
+      metadata: chunkMetadata
+    });
+  }
+  
   return chunks;
 }
 
-// Function to generate embeddings using OpenAI
-async function generateEmbedding(text: string, apiKey: string): Promise<number[]> {
+async function generateEmbedding(text, apiKey) {
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -317,22 +280,15 @@ async function generateEmbedding(text: string, apiKey: string): Promise<number[]
     },
     body: JSON.stringify({
       model: 'text-embedding-3-small',
-      input: text,
-      encoding_format: 'float'
+      input: text.slice(0, 8191), // Ensure within token limit
     }),
   });
 
   if (!response.ok) {
-    const errorData = await response.text();
-    console.error('OpenAI API error:', response.status, errorData);
-    throw new Error(`OpenAI API error: ${response.status} - ${errorData}`);
+    const error = await response.text();
+    throw new Error(`OpenAI API error: ${error}`);
   }
 
   const data = await response.json();
-  
-  if (!data.data || !data.data[0] || !data.data[0].embedding) {
-    throw new Error('Invalid response from OpenAI embeddings API');
-  }
-
   return data.data[0].embedding;
 }
