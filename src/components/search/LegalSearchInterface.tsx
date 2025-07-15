@@ -9,6 +9,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useOfflineStorage } from '@/hooks/useOfflineStorage';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { OfflineIndicator } from '@/components/common/OfflineIndicator';
 import { supabase } from '@/integrations/supabase/client';
 
 // TypeScript Interfaces
@@ -64,7 +66,8 @@ const LegalSearchInterface: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   
   const { toast } = useToast();
-  const { saveDocument, isInitialized } = useOfflineStorage();
+  const { saveDocument, saveQuery, getAllQueries, isInitialized } = useOfflineStorage();
+  const { isOnline, isConnected } = useNetworkStatus();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Load search history from localStorage
@@ -102,6 +105,35 @@ const LegalSearchInterface: React.FC = () => {
     setResult(null);
 
     try {
+      // Check if offline and try to find cached result
+      if (!isConnected && isInitialized) {
+        const cachedQueries = await getAllQueries();
+        const cachedResult = cachedQueries.find(q => 
+          q.query.toLowerCase().includes(searchQuery.trim().toLowerCase())
+        );
+        
+        if (cachedResult) {
+          const searchResult: LegalSearchResult = {
+            answer: cachedResult.answer,
+            sources: cachedResult.sources,
+            confidence: cachedResult.confidence,
+            response_time_ms: 0,
+            tokens_used: 0,
+            chunks_processed: 0,
+          };
+          
+          setResult(searchResult);
+          toast({
+            title: "Offline Result",
+            description: "Showing cached result from previous search",
+          });
+          return;
+        } else {
+          throw new Error('No cached results found. Please try again when online.');
+        }
+      }
+
+      // Online search
       const { data, error: supabaseError } = await supabase.functions.invoke('process-legal-query', {
         body: { 
           query: searchQuery.trim(),
@@ -127,6 +159,19 @@ const LegalSearchInterface: React.FC = () => {
       };
 
       setResult(searchResult);
+
+      // Save to offline storage
+      if (isInitialized) {
+        await saveQuery({
+          id: Date.now().toString(),
+          query: searchQuery.trim(),
+          answer: searchResult.answer,
+          sources: searchResult.sources,
+          confidence: searchResult.confidence,
+          timestamp: Date.now(),
+          synced: true,
+        });
+      }
 
       // Add to search history
       const newHistoryItem: SearchHistoryItem = {
@@ -230,6 +275,7 @@ const LegalSearchInterface: React.FC = () => {
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 space-y-6">
+      <OfflineIndicator />
       {/* Search Header */}
       <div className="text-center space-y-2">
         <div className="flex items-center justify-center gap-2 text-primary">
