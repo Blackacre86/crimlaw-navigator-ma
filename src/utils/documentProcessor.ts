@@ -2,7 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 export async function processDocument(documentId: string): Promise<boolean> {
   try {
-    console.log('🚀 Triggering document processing for:', documentId);
+    console.log('🚀 Triggering enhanced document processing for:', documentId);
     
     const { data, error } = await supabase.functions.invoke('process-document', {
       body: { documentId }
@@ -22,7 +22,7 @@ export async function processDocument(documentId: string): Promise<boolean> {
 }
 
 export async function processAllDocuments(): Promise<{ success: number; failed: number }> {
-  console.log('🔄 Processing all pending documents...');
+  console.log('🔄 Processing all pending documents with LlamaCloud...');
   
   // Get all documents that need processing
   const { data: documents, error } = await supabase
@@ -40,7 +40,7 @@ export async function processAllDocuments(): Promise<{ success: number; failed: 
     return { success: 0, failed: 0 };
   }
   
-  console.log(`📄 Found ${documents.length} documents to process`);
+  console.log(`📄 Found ${documents.length} documents to process with enhanced legal chunking`);
   
   let success = 0;
   let failed = 0;

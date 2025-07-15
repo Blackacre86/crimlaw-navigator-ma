@@ -35,47 +35,37 @@ export default function DashboardPage() {
     setIsProcessing(true);
     
     try {
-      // First, reset any stuck documents
+      console.log('🔄 Starting enhanced document processing with LlamaCloud...');
+      
+      // First, reset any failed or processing documents to pending
       const { error: resetError } = await supabase
         .from('documents')
-        .update({ 
-          chunked: false, 
-          ingestion_status: 'pending',
-          error_message: null 
-        })
-        .in('ingestion_status', ['failed', 'processing'])
-        .or('chunked.eq.true,chunk_count.eq.0');
+        .update({ ingestion_status: 'pending', error_message: null })
+        .in('ingestion_status', ['failed', 'processing']);
       
       if (resetError) {
-        console.error('Reset error:', resetError);
-      }
-      
-      // Process all pending documents
-      const result = await processAllDocuments();
-      
-      if (result.success > 0) {
+        console.error('Error resetting document status:', resetError);
         toast({
-          title: "Processing Complete",
-          description: `Successfully processed ${result.success} document(s)`,
-        });
-      }
-      
-      if (result.failed > 0) {
-        toast({
-          title: "Some documents failed",
-          description: `${result.failed} document(s) failed to process`,
+          title: "Warning",
+          description: "Some documents may not have been reset properly",
           variant: "destructive",
         });
       }
       
-      // Refresh the page data
-      window.location.reload();
+      // Process all documents with enhanced legal chunking
+      const result = await processAllDocuments();
+      
+      toast({
+        title: "Legal Document Processing Complete",
+        description: `Successfully processed ${result.success} documents with table preservation${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
+        variant: result.failed > 0 ? "destructive" : "default",
+      });
       
     } catch (error) {
-      console.error('Processing error:', error);
+      console.error('Document processing error:', error);
       toast({
-        title: "Processing Failed",
-        description: "An error occurred while processing documents",
+        title: "Processing Failed", 
+        description: error.message || "An unexpected error occurred during legal document processing",
         variant: "destructive",
       });
     } finally {
@@ -151,16 +141,15 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                The Massachusetts legal documents are ready but need embedding generation to enable AI search. 
-                This will use the legal-optimized chunking strategy to preserve statute structure and citations.
+                Enhanced processing for legal documents with LlamaCloud extraction and table preservation. Use this to process PDFs with complex layouts and tables.
               </p>
               <Button onClick={handleProcessDocuments} disabled={isProcessing} className="w-full" size="lg">
                 {isProcessing ? <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing Documents...
+                    Processing Legal Documents...
                   </> : <>
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    Generate Embeddings for Legal Documents
+                    Process Legal Documents with Table Preservation
                   </>}
               </Button>
             </div>

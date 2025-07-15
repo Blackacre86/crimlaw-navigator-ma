@@ -1,7 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import * as pdfParse from 'https://esm.sh/pdf-parse@1.1.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -19,8 +18,9 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    const llamaCloudApiKey = Deno.env.get('LLAMA_CLOUD_API_KEY');
 
-    if (!supabaseUrl || !supabaseServiceKey || !openaiApiKey) {
+    if (!supabaseUrl || !supabaseServiceKey || !openaiApiKey || !llamaCloudApiKey) {
       throw new Error('Missing required environment variables');
     }
 
@@ -51,29 +51,18 @@ serve(async (req) => {
 
     let textContent = document.content;
 
-    // If no content exists, extract from PDF
+    // If no content exists, extract from PDF using LlamaCloud
     if (!textContent && document.file_path) {
-      console.log('📑 Extracting text from PDF...');
+      console.log('📑 Extracting text from PDF using LlamaCloud...');
       
-      // Download PDF from storage
-      const { data: fileData, error: downloadError } = await supabase.storage
-        .from('documents')
-        .download(document.file_path);
-
-      if (downloadError || !fileData) {
-        throw new Error(`Failed to download PDF: ${downloadError?.message}`);
-      }
-
-      // Convert blob to buffer
-      const arrayBuffer = await fileData.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      // Extract text using pdf-parse
       try {
-        const pdfData = await pdfParse.default(buffer);
-        textContent = pdfData.text;
+        textContent = await extractPdfWithLlamaCloud(
+          supabase, 
+          document.file_path, 
+          llamaCloudApiKey
+        );
         
-        console.log(`✅ Extracted ${textContent.length} characters from ${pdfData.numpages} pages`);
+        console.log(`✅ Extracted ${textContent.length} characters using LlamaCloud`);
 
         // Store extracted content back to document
         await supabase
@@ -81,9 +70,9 @@ serve(async (req) => {
           .update({ content: textContent })
           .eq('id', documentId);
 
-      } catch (pdfError) {
-        console.error('❌ PDF parsing error:', pdfError);
-        throw new Error(`PDF parsing failed: ${pdfError.message}`);
+      } catch (llamaError) {
+        console.error('❌ LlamaCloud extraction error:', llamaError);
+        throw new Error(`PDF extraction failed: ${llamaError.message}`);
       }
     }
 
@@ -97,9 +86,13 @@ serve(async (req) => {
       .delete()
       .eq('document_id', documentId);
 
-    // Legal document chunking
-    console.log('🔪 Chunking with legal optimization...');
-    const chunks = chunkLegalText(textContent);
+    // Enhanced legal document chunking
+    console.log('🔪 Chunking with enhanced legal optimization...');
+    const chunks = chunkLegalDocument(textContent, {
+      document_id: documentId,
+      title: document.title || document.document_title,
+      category: document.category
+    });
     console.log(`📊 Created ${chunks.length} chunks`);
 
     // Process chunks in batches
@@ -112,15 +105,14 @@ serve(async (req) => {
 
       const batchPromises = batch.map(async (chunk, batchIndex) => {
         const chunkIndex = i + batchIndex;
-        const embedding = await generateEmbedding(chunk.content, openaiApiKey);
+        const embedding = await generateEmbedding(chunk.text, openaiApiKey);
         
         return {
           document_id: documentId,
-          content: chunk.content,
+          content: chunk.text,
           embedding: JSON.stringify(embedding),
           metadata: {
             ...chunk.metadata,
-            chunk_index: chunkIndex,
             title: document.title || document.document_title
           },
           chunk_index: chunkIndex
@@ -201,70 +193,247 @@ serve(async (req) => {
   }
 });
 
-function chunkLegalText(text, maxSize = 2500, overlap = 200) {
+// Enhanced PDF extraction using LlamaCloud
+async function extractPdfWithLlamaCloud(supabase, filePath, apiKey) {
+  console.log('🦙 Starting LlamaCloud extraction...');
+  
+  // Download PDF from storage
+  const { data: fileData, error: downloadError } = await supabase.storage
+    .from('documents')
+    .download(filePath);
+
+  if (downloadError || !fileData) {
+    throw new Error(`Failed to download PDF: ${downloadError?.message}`);
+  }
+
+  // Convert to base64 for LlamaCloud
+  const arrayBuffer = await fileData.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  const base64 = btoa(String.fromCharCode(...uint8Array));
+
+  // Upload to LlamaCloud for parsing
+  const uploadResponse = await fetch('https://api.cloud.llamaindex.ai/api/parsing/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      base64_file: base64,
+      parsing_instruction: `
+        This is a legal document. Please extract text while:
+        1. Preserving all section numbers, rule numbers, and legal citations
+        2. Maintaining table structure with proper spacing and alignment
+        3. Keeping footnotes and references intact
+        4. Preserving paragraph structure and indentation
+        5. Maintaining any numbered or lettered lists
+        6. Converting complex tables to properly formatted markdown tables
+      `,
+      result_type: 'markdown',
+      language: 'en'
+    }),
+  });
+
+  if (!uploadResponse.ok) {
+    const error = await uploadResponse.text();
+    throw new Error(`LlamaCloud upload failed: ${error}`);
+  }
+
+  const uploadResult = await uploadResponse.json();
+  const jobId = uploadResult.id;
+
+  console.log(`📤 Upload successful, job ID: ${jobId}`);
+
+  // Poll for completion
+  let attempts = 0;
+  const maxAttempts = 30; // 5 minutes max
+  
+  while (attempts < maxAttempts) {
+    await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+    
+    const statusResponse = await fetch(`https://api.cloud.llamaindex.ai/api/parsing/job/${jobId}`, {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!statusResponse.ok) {
+      throw new Error('Failed to check parsing status');
+    }
+
+    const status = await statusResponse.json();
+    console.log(`📊 Parsing status: ${status.status}`);
+
+    if (status.status === 'SUCCESS') {
+      console.log('✅ LlamaCloud parsing completed');
+      return status.result.markdown || status.result.text || '';
+    } else if (status.status === 'ERROR') {
+      throw new Error(`LlamaCloud parsing failed: ${status.error || 'Unknown error'}`);
+    }
+
+    attempts++;
+  }
+
+  throw new Error('LlamaCloud parsing timed out');
+}
+
+// Enhanced legal document chunking
+function chunkLegalDocument(text, metadata, maxChars = 3200) {
+  const chunks = [];
+  let chunkIndex = 0;
+
+  // Legal document patterns
+  const patterns = {
+    // Major sections (Rules, Chapters, etc.)
+    majorSection: /(?:^|\n)((?:RULE|CHAPTER|PART|ARTICLE|SECTION|§)\s*[\d\w\.\-]+[^\n]*)/gim,
+    // Subsections (numbered/lettered)
+    subSection: /(?:^|\n)(\(\s*[a-z0-9]+\s*\)[^\n]*)/gim,
+    // Tables (markdown format from LlamaCloud)
+    table: /(?:^|\n)(\|[^\n]*\|(?:\n\|[^\n]*\|)*)/gim,
+    // Citations and references
+    citation: /(?:\d+\s+[A-Z][^\d]*\d+|\[[^\]]+\]|\(\d{4}\))/g
+  };
+
+  // Split by major sections first
+  const sections = text.split(patterns.majorSection);
+  let currentSection = '';
+  let sectionHeader = null;
+
+  for (let i = 0; i < sections.length; i++) {
+    const content = sections[i]?.trim();
+    if (!content) continue;
+
+    // Check if this is a header
+    const isHeader = patterns.majorSection.test(content);
+    
+    if (isHeader) {
+      sectionHeader = content;
+      continue;
+    }
+
+    // Process content under this section
+    const processedChunks = processSectionContent(
+      content, 
+      sectionHeader, 
+      chunkIndex, 
+      metadata.document_id,
+      maxChars
+    );
+    
+    chunks.push(...processedChunks);
+    chunkIndex += processedChunks.length;
+  }
+
+  return chunks.map(chunk => ({
+    text: chunk.content,
+    metadata: {
+      ...chunk.metadata,
+      document_id: metadata.document_id,
+      title: metadata.title,
+      category: metadata.category
+    }
+  }));
+}
+
+function processSectionContent(content, sectionHeader, startIndex, documentId, maxChars) {
   const chunks = [];
   
-  // First, try to split by major sections
-  const sectionRegex = /(?:^|\n)(?:RULE|SECTION|CHAPTER|PART|ARTICLE|§)\s*[\d\w\.\-]+[^\n]*/gim;
-  const sections = text.split(sectionRegex);
+  // Check for tables first - they should be kept intact
+  const tableMatches = content.match(/\|[^\n]*\|(?:\n\|[^\n]*\|)*/g);
   
-  let currentChunk = '';
-  let chunkMetadata = { type: 'legal_section' };
-  
-  for (const section of sections) {
-    const trimmedSection = section.trim();
-    if (!trimmedSection) continue;
+  if (tableMatches && tableMatches.length > 0) {
+    // Handle content with tables
+    let remainingContent = content;
+    let chunkIndex = startIndex;
     
-    // If section fits in one chunk
-    if (trimmedSection.length <= maxSize) {
-      if (currentChunk && (currentChunk.length + trimmedSection.length > maxSize)) {
-        // Save current chunk
-        chunks.push({
-          content: currentChunk.trim(),
-          metadata: chunkMetadata
-        });
-        currentChunk = trimmedSection;
-      } else {
-        currentChunk += (currentChunk ? '\n\n' : '') + trimmedSection;
-      }
-    } else {
-      // Section too large, split by paragraphs
-      if (currentChunk) {
-        chunks.push({
-          content: currentChunk.trim(),
-          metadata: chunkMetadata
-        });
-        currentChunk = '';
+    tableMatches.forEach(table => {
+      const parts = remainingContent.split(table);
+      const beforeTable = parts[0]?.trim();
+      
+      // Process text before table
+      if (beforeTable && beforeTable.length > 50) {
+        const beforeChunks = splitTextIntoChunks(beforeTable, sectionHeader, chunkIndex, documentId, maxChars);
+        chunks.push(...beforeChunks);
+        chunkIndex += beforeChunks.length;
       }
       
-      // Split large section by paragraphs
-      const paragraphs = trimmedSection.split(/\n\s*\n/);
-      
-      for (const para of paragraphs) {
-        if (para.trim().length === 0) continue;
-        
-        if (currentChunk.length + para.length > maxSize && currentChunk) {
-          chunks.push({
-            content: currentChunk.trim(),
-            metadata: { type: 'legal_paragraph' }
-          });
-          
-          // Add overlap from previous chunk
-          const sentences = currentChunk.split(/[.!?]+/);
-          const overlapText = sentences.slice(-2).join('. ');
-          currentChunk = overlapText + (overlapText ? '. ' : '') + para.trim();
-        } else {
-          currentChunk += (currentChunk ? '\n\n' : '') + para.trim();
+      // Add table as its own chunk (may exceed maxChars for preservation)
+      chunks.push({
+        content: `${sectionHeader ? sectionHeader + '\n\n' : ''}${table}`,
+        metadata: {
+          type: 'legal_table',
+          section_header: sectionHeader,
+          chunk_index: chunkIndex
         }
+      });
+      chunkIndex++;
+      
+      remainingContent = parts[1] || '';
+    });
+    
+    // Process remaining content after last table
+    if (remainingContent?.trim() && remainingContent.trim().length > 50) {
+      const remainingChunks = splitTextIntoChunks(remainingContent.trim(), sectionHeader, chunkIndex, documentId, maxChars);
+      chunks.push(...remainingChunks);
+    }
+  } else {
+    // No tables, process normally
+    const contentChunks = splitTextIntoChunks(content, sectionHeader, startIndex, documentId, maxChars);
+    chunks.push(...contentChunks);
+  }
+  
+  return chunks;
+}
+
+function splitTextIntoChunks(text, sectionHeader, startIndex, documentId, maxChars) {
+  const chunks = [];
+  
+  if (text.length <= maxChars) {
+    return [{
+      content: `${sectionHeader ? sectionHeader + '\n\n' : ''}${text}`,
+      metadata: {
+        type: 'legal_content',
+        section_header: sectionHeader,
+        chunk_index: startIndex
       }
+    }];
+  }
+
+  // Split by paragraphs
+  const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim());
+  let currentChunk = sectionHeader ? sectionHeader + '\n\n' : '';
+  let chunkIndex = startIndex;
+  
+  for (const paragraph of paragraphs) {
+    const withParagraph = currentChunk + (currentChunk.endsWith('\n\n') ? '' : '\n\n') + paragraph;
+    
+    if (withParagraph.length > maxChars && currentChunk.length > (sectionHeader?.length || 0) + 2) {
+      // Save current chunk and start new one
+      chunks.push({
+        content: currentChunk.trim(),
+        metadata: {
+          type: 'legal_content',
+          section_header: sectionHeader,
+          chunk_index: chunkIndex++
+        }
+      });
+      
+      // Start new chunk with section header
+      currentChunk = sectionHeader ? sectionHeader + '\n\n' + paragraph : paragraph;
+    } else {
+      currentChunk = withParagraph;
     }
   }
   
-  // Don't forget the last chunk
-  if (currentChunk.trim()) {
+  // Add final chunk
+  if (currentChunk.trim() && currentChunk.length > (sectionHeader?.length || 0) + 2) {
     chunks.push({
       content: currentChunk.trim(),
-      metadata: chunkMetadata
+      metadata: {
+        type: 'legal_content', 
+        section_header: sectionHeader,
+        chunk_index: chunkIndex
+      }
     });
   }
   
