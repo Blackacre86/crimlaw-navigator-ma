@@ -84,7 +84,9 @@ export default function Admin() {
       setProgress(50);
       setStatus('Document processing started in background. Check the processing status below.');
 
-      // Call document processor edge function
+      // Call document processor edge function with enhanced error handling
+      console.log('🚀 Calling document-processor edge function...', { fileName, originalName: file.name });
+      
       const { data, error } = await supabase.functions.invoke('document-processor', {
         body: {
           fileName,
@@ -92,19 +94,47 @@ export default function Admin() {
         },
       });
 
+      console.log('📡 Edge function response:', { data, error });
+
       if (error) {
+        const errorMessage = error.message || 'Unknown error occurred';
+        const errorDetails = {
+          fileName: file.name,
+          uploadedFileName: fileName,
+          errorMessage: errorMessage,
+          errorContext: error.context || 'Unknown context',
+          functionError: error
+        };
+        
+        console.error('❌ Document processing failed:', errorDetails);
+        
         showError({
           title: "Document Processing Failed",
-          message: `Failed to start document processing: ${error.message}`,
+          message: `Failed to start document processing: ${errorMessage}. Please check that all API keys are configured in Supabase settings.`,
           component: "Admin",
           action: "document_processing",
-          metadata: { 
-            fileName: file.name,
-            uploadedFileName: fileName,
-            processingError: error
-          }
+          metadata: errorDetails
         });
-        throw error;
+        throw new Error(`Document processing failed: ${errorMessage}`);
+      }
+
+      if (!data) {
+        const noDataError = {
+          fileName: file.name,
+          uploadedFileName: fileName,
+          issue: 'No response data from edge function'
+        };
+        
+        console.error('❌ No data returned from edge function:', noDataError);
+        
+        showError({
+          title: "Document Processing Failed",
+          message: "No response received from document processor. The function may have failed silently.",
+          component: "Admin", 
+          action: "document_processing",
+          metadata: noDataError
+        });
+        throw new Error('No response data from document processor');
       }
 
       setProgress(100);
@@ -292,52 +322,100 @@ export default function Admin() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
-                onClick={async () => {
-                  try {
-                    setStatus('Testing Edge Function connectivity...');
-                    const { data, error } = await supabase.functions.invoke('test-function', {
-                      body: { test: true, timestamp: new Date().toISOString() }
-                    });
-                    
-                    if (error) {
-                      setStatus(`❌ Test failed: ${error.message}`);
+              <div className="space-y-4">
+                <Button 
+                  onClick={async () => {
+                    try {
+                      setStatus('Testing Edge Function connectivity...');
+                      const { data, error } = await supabase.functions.invoke('test-function', {
+                        body: { test: true, timestamp: new Date().toISOString() }
+                      });
+                      
+                      if (error) {
+                        setStatus(`❌ Test failed: ${error.message}`);
+                        showError({
+                          title: "Edge Function Test Failed",
+                          message: `The test function call failed: ${error.message}. Please check the Edge Function configuration and connectivity.`,
+                          component: "Admin",
+                          action: "test_edge_function",
+                          metadata: { 
+                            functionName: 'test-function',
+                            errorDetails: error
+                          }
+                        });
+                      } else {
+                        setStatus(`✅ Test successful! Function responded at ${data.timestamp}`);
+                        toast({
+                          title: "Test successful",
+                          description: "Edge Functions are working correctly",
+                        });
+                      }
+                    } catch (error: any) {
+                      setStatus(`❌ Test error: ${error.message}`);
                       showError({
-                        title: "Edge Function Test Failed",
-                        message: `The test function call failed: ${error.message}. Please check the Edge Function configuration and connectivity.`,
+                        title: "Test Connection Error",
+                        message: `An unexpected error occurred while testing Edge Functions: ${error.message}. This may indicate a network connectivity issue or service interruption.`,
                         component: "Admin",
-                        action: "test_edge_function",
+                        action: "test_connection",
                         metadata: { 
-                          functionName: 'test-function',
-                          errorDetails: error
+                          errorType: error.constructor?.name || 'Unknown',
+                          errorStack: error.stack,
+                          timestamp: new Date().toISOString()
                         }
                       });
-                    } else {
-                      setStatus(`✅ Test successful! Function responded at ${data.timestamp}`);
-                      toast({
-                        title: "Test successful",
-                        description: "Edge Functions are working correctly",
-                      });
                     }
-                  } catch (error: any) {
-                    setStatus(`❌ Test error: ${error.message}`);
-                    showError({
-                      title: "Test Connection Error",
-                      message: `An unexpected error occurred while testing Edge Functions: ${error.message}. This may indicate a network connectivity issue or service interruption.`,
-                      component: "Admin",
-                      action: "test_connection",
-                      metadata: { 
-                        errorType: error.constructor?.name || 'Unknown',
-                        errorStack: error.stack,
-                        timestamp: new Date().toISOString()
+                  }}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Test Edge Functions
+                </Button>
+                
+                <Button 
+                  onClick={async () => {
+                    try {
+                      setStatus('Testing document processor function...');
+                      console.log('🧪 Testing document-processor function...');
+                      
+                      const { data, error } = await supabase.functions.invoke('document-processor', {
+                        body: {
+                          fileName: 'test-file.pdf',
+                          originalName: 'Test Document.pdf'
+                        }
+                      });
+                      
+                      console.log('🧪 Test response:', { data, error });
+                      
+                      if (error) {
+                        setStatus(`❌ Document processor test failed: ${error.message}`);
+                        console.error('❌ Document processor test failed:', error);
+                      } else if (data) {
+                        setStatus(`✅ Document processor responding! Request ID: ${data.requestId}`);
+                        console.log('✅ Document processor test successful:', data);
+                        toast({
+                          title: "Document processor test successful",
+                          description: "The function is accessible and responding correctly",
+                        });
+                      } else {
+                        setStatus(`❌ Document processor returned no data`);
                       }
-                    });
-                  }
-                }}
-                variant="outline"
-              >
-                Test Edge Functions
-              </Button>
+                    } catch (error: any) {
+                      console.error('❌ Test error:', error);
+                      setStatus(`❌ Test error: ${error.message}`);
+                    }
+                  }}
+                  variant="outline"  
+                  className="w-full"
+                >
+                  Test Document Processor
+                </Button>
+                
+                {status && (
+                  <Alert>
+                    <AlertDescription>{status}</AlertDescription>
+                  </Alert>
+                )}
+              </div>
             </CardContent>
           </Card>
 

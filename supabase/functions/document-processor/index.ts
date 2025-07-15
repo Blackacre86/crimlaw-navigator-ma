@@ -9,50 +9,83 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Step 2: Add debug logging to confirm function invocation
-  console.log(`[${new Date().toISOString()}] document-processor function invoked.`);
+  const requestId = Math.random().toString(36).substring(2, 15);
+  console.log(`[${requestId}] 🚀 Document processor function invoked at ${new Date().toISOString()}`);
 
   try {
-    console.log('🚀 Document processor request received');
+    // Parse request body with detailed logging
+    let requestBody;
+    try {
+      requestBody = await req.json();
+      console.log(`[${requestId}] Request body parsed:`, JSON.stringify(requestBody, null, 2));
+    } catch (parseError) {
+      console.error(`[${requestId}] ❌ Failed to parse request body:`, parseError);
+      return new Response(
+        JSON.stringify({ error: 'Invalid JSON in request body', details: parseError.message }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
-    const { fileName, originalName } = await req.json();
+    const { fileName, originalName } = requestBody;
     
     if (!fileName || !originalName) {
+      console.error(`[${requestId}] ❌ Missing required parameters. fileName: ${fileName}, originalName: ${originalName}`);
       return new Response(
-        JSON.stringify({ error: 'Missing required parameters: fileName and originalName' }),
+        JSON.stringify({ 
+          error: 'Missing required parameters: fileName and originalName',
+          received: { fileName, originalName }
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`📄 Document processing request: ${originalName} (internal: ${fileName})`);
+    console.log(`[${requestId}] 📄 Processing request for: ${originalName} (internal: ${fileName})`);
 
-    // Initialize Supabase client
+    // Check environment variables with detailed logging
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+    
+    console.log(`[${requestId}] 🔧 Environment check:`, {
+      hasSupabaseUrl: !!supabaseUrl,
+      hasServiceKey: !!supabaseServiceKey,
+      hasOpenAI: !!openaiApiKey,
+      supabaseUrlPrefix: supabaseUrl?.substring(0, 20) + '...'
+    });
     
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.error(`[${requestId}] ❌ Missing Supabase configuration`);
       return new Response(
-        JSON.stringify({ error: 'Missing Supabase configuration' }),
+        JSON.stringify({ 
+          error: 'Missing Supabase configuration',
+          details: {
+            hasSupabaseUrl: !!supabaseUrl,
+            hasServiceKey: !!supabaseServiceKey
+          }
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    console.log(`[${requestId}] ✅ Supabase client initialized successfully`);
 
     // Start background processing using EdgeRuntime.waitUntil
+    console.log(`[${requestId}] 🔄 Starting background processing...`);
     EdgeRuntime.waitUntil(
-      processDocumentInBackground(fileName, originalName, supabase)
+      processDocumentInBackground(fileName, originalName, supabase, requestId)
     );
 
     // Return immediate response
-    console.log('✅ Document processing started in background');
+    console.log(`[${requestId}] ✅ Document processing started in background`);
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Document processing started in background',
         fileName,
         originalName,
-        status: 'queued'
+        status: 'queued',
+        requestId
       }),
       { 
         status: 202, // Accepted - processing in background
@@ -61,11 +94,18 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('❌ Document processor request error:', error);
+    console.error(`[${requestId}] ❌ Document processor request error:`, {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     return new Response(
       JSON.stringify({
         error: error.message,
-        success: false
+        success: false,
+        requestId,
+        errorType: error.name,
+        timestamp: new Date().toISOString()
       }),
       {
         status: 500,
@@ -79,14 +119,15 @@ serve(async (req) => {
 async function processDocumentInBackground(
   fileName: string, 
   originalName: string, 
-  supabase: any
+  supabase: any,
+  requestId: string
 ) {
   const startTime = Date.now();
   let currentStep = 'initialization';
   let jobId: string | null = null;
 
   try {
-    console.log(`🔄 Background processing started for: ${originalName}`);
+    console.log(`[${requestId}] 🔄 Background processing started for: ${originalName}`);
     
     // Create processing job record
     const { data: jobData, error: jobError } = await supabase
