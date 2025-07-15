@@ -296,7 +296,7 @@ async function processDocumentInBackground(
                     await processChunkEmbedding(subChunk, `${chunk.title} - Part ${subIndex + 1}`, chunk.metadata, supabase, openaiApiKey, originalName);
                     processedChunks++;
                   }
-                  continue; // Skip the original chunk processing
+                  return; // Skip the original chunk processing
                 } else {
                   // If splitting didn't work, try even more aggressive splitting
                   const aggressiveChunks = splitOversizedChunk(chunk.content, 2000);
@@ -315,7 +315,7 @@ async function processDocumentInBackground(
                     await processChunkEmbedding(agChunk, `${chunk.title} - Part ${agIndex + 1}`, chunk.metadata, supabase, openaiApiKey, originalName);
                     processedChunks++;
                   }
-                  continue;
+                  return;
                 }
               }
               
