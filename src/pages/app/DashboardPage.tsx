@@ -3,12 +3,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Clock, FileText, TrendingUp, Sparkles, History as HistoryIcon, Loader2, Scale, BookOpen, Gavel } from 'lucide-react';
+import { Search, Clock, FileText, TrendingUp, Sparkles, History as HistoryIcon, Loader2, Scale, BookOpen, Gavel, RefreshCw, AlertCircle } from 'lucide-react';
 import { SearchBar } from '@/components/SearchBar';
 import { SearchResults } from '@/components/SearchResults';
 import { OnboardingWelcome } from '@/components/OnboardingWelcome';
+import { processAllDocuments } from '@/utils/documentProcessor';
+import { useToast } from '@/hooks/use-toast';
 
 export default function DashboardPage() {
+  const { toast } = useToast();
+  const [isProcessing, setIsProcessing] = useState(false);
+  
   const [searchState, setSearchState] = useState({
     query: '',
     isLoading: false,
@@ -19,6 +24,40 @@ export default function DashboardPage() {
 
   const handleSearch = (query: string, isLoading: boolean, answer: string | null, sources: any[], error: string | null) => {
     setSearchState({ query, isLoading, answer, sources, error });
+  };
+
+  const handleProcessDocuments = async () => {
+    setIsProcessing(true);
+    toast({
+      title: "Processing Documents",
+      description: "Starting document processing with legal chunking and embeddings...",
+    });
+    
+    try {
+      const result = await processAllDocuments();
+      
+      if (result.success > 0) {
+        toast({
+          title: "Processing Complete",
+          description: `Successfully processed ${result.success} documents. ${result.failed > 0 ? `${result.failed} failed.` : ''}`,
+        });
+      } else {
+        toast({
+          title: "Processing Failed", 
+          description: `Failed to process documents. Check console for details.`,
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error in document processing:', error);
+      toast({
+        title: "Processing Error",
+        description: "An unexpected error occurred during processing.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const recentSearches = [
@@ -77,6 +116,45 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Emergency Fix Panel */}
+        <Card className="bg-gradient-to-br from-destructive/5 to-orange-500/5 border-destructive/20">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              <span>RAG Pipeline Status</span>
+            </CardTitle>
+            <CardDescription>
+              Documents need to be processed with legal chunking and embeddings for search to work
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                The Massachusetts legal documents are ready but need embedding generation to enable AI search. 
+                This will use the legal-optimized chunking strategy to preserve statute structure and citations.
+              </p>
+              <Button 
+                onClick={handleProcessDocuments}
+                disabled={isProcessing}
+                className="w-full"
+                size="lg"
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing Documents...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Generate Embeddings for Legal Documents
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Search Results */}
         <SearchResults 
