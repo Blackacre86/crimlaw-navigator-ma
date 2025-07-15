@@ -144,12 +144,8 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
         description: `Processing job for "${job.original_name}" has been deleted.`,
       });
 
-      // Clean up the hidden job since deletion was successful
-      setHiddenJobs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(job.id);
-        return newSet;
-      });
+      // Keep the job hidden permanently since deletion was successful
+      // The real-time subscription will handle removing it from the jobs array
     } catch (error: any) {
       // Restore the job in UI since deletion failed
       setHiddenJobs(prev => {
