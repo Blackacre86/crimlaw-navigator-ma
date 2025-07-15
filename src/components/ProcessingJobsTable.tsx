@@ -24,6 +24,7 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
   const { toast } = useToast();
   const { showError, selectedError, setSelectedError } = useErrorHandling();
   const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -105,6 +106,9 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
       return;
     }
 
+    // Immediately hide the job from UI
+    setHiddenJobs(prev => new Set(prev).add(job.id));
+
     try {
       console.log('Attempting to delete job:', job.id, 'with document:', job.document_name);
       
@@ -164,6 +168,13 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
         description: `Processing job for "${job.original_name}" has been deleted.`,
       });
 
+      // Clean up the hidden job since deletion was successful
+      setHiddenJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(job.id);
+        return newSet;
+      });
+
       // Force refresh immediately and again after a delay
       onRefresh();
       setTimeout(() => {
@@ -171,6 +182,12 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
         onRefresh();
       }, 1000);
     } catch (error: any) {
+      // Restore the job in UI since deletion failed
+      setHiddenJobs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(job.id);
+        return newSet;
+      });
       showError({
         title: "Job Deletion Failed",
         message: `Failed to delete processing job: ${error.message || 'Unknown error occurred'}`,
@@ -217,7 +234,10 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
     });
   };
 
-  if (jobs.length === 0) {
+  // Filter out hidden jobs
+  const visibleJobs = jobs.filter(job => !hiddenJobs.has(job.id));
+
+  if (visibleJobs.length === 0) {
     return (
       <Card>
         <CardHeader>
@@ -245,7 +265,7 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
           <div className="flex items-center gap-2">
             <Eye className="h-5 w-5" />
             Processing Jobs Monitor
-            <Badge variant="outline">{jobs.length} jobs</Badge>
+            <Badge variant="outline">{visibleJobs.length} jobs</Badge>
           </div>
           <Button 
             variant="outline" 
@@ -273,7 +293,7 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
               </TableRow>
             </TableHeader>
             <TableBody>
-              {jobs.map((job) => (
+              {visibleJobs.map((job) => (
                 <TableRow key={job.id}>
                   <TableCell>
                     <div className="space-y-1">
