@@ -157,7 +157,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen p-6 bg-gradient-background">
+    <div className="min-h-screen p-6" style={{ background: 'var(--gradient-background)' }}>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">

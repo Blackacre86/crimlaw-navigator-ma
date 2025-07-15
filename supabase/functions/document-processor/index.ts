@@ -232,8 +232,8 @@ async function processDocumentInBackground(
               const tokenCount = estimateTokenCount(chunk.content);
               console.log(`📊 Processing chunk ${chunkIndex}: ${chunk.content.length} chars, ~${tokenCount} tokens`);
               
-              // Use 7000 token limit to provide more safety margin
-              if (tokenCount > 7000) {
+              // Use 6000 token limit to provide maximum safety margin
+              if (tokenCount > 6000) {
                 console.warn(`⚠️ Chunk ${chunkIndex} has ${tokenCount} tokens, splitting...`);
                 // Split oversized chunk with more conservative sizing
                 const subChunks = splitOversizedChunk(chunk.content, 3500);
@@ -246,7 +246,7 @@ async function processDocumentInBackground(
                     const subChunk = subChunks[subIndex];
                     const subTokenCount = estimateTokenCount(subChunk);
                     
-                    if (subTokenCount > 7000) {
+                    if (subTokenCount > 6000) {
                       console.error(`❌ Sub-chunk still too large: ${subTokenCount} tokens, skipping`);
                       continue;
                     }
@@ -265,7 +265,7 @@ async function processDocumentInBackground(
                     const agChunk = aggressiveChunks[agIndex];
                     const agTokenCount = estimateTokenCount(agChunk);
                     
-                    if (agTokenCount > 7000) {
+                    if (agTokenCount > 6000) {
                       console.error(`❌ Even aggressive split too large: ${agTokenCount} tokens, skipping`);
                       continue;
                     }

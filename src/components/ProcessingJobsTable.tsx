@@ -108,26 +108,53 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
     try {
       console.log('Attempting to delete job:', job.id, 'with document:', job.document_name);
       
-      // First try to delete the file from storage if it exists
-      const { error: storageError } = await supabase.storage
-        .from('documents')
-        .remove([job.document_name]);
+      // For failed/stuck jobs, force delete regardless of storage errors
+      if (job.status === 'failed' || job.status === 'error') {
+        console.log('Force deleting failed/stuck job');
+        
+        // Try to delete from storage but don't fail if it doesn't work
+        const { error: storageError } = await supabase.storage
+          .from('documents')
+          .remove([job.document_name]);
+          
+        if (storageError) {
+          console.log('Storage deletion failed (expected for stuck jobs):', storageError.message);
+        }
+        
+        // Force delete the database record
+        const { error: dbError } = await supabase
+          .from('processing_jobs')
+          .delete()
+          .eq('id', job.id);
 
-      if (storageError) {
-        console.log('Storage deletion result:', storageError.message);
+        if (dbError) {
+          console.error('Force deletion failed:', dbError);
+          throw dbError;
+        }
+        
+        console.log('Force deletion successful');
       } else {
-        console.log('File deleted from storage successfully');
-      }
+        // Normal deletion process for successful jobs
+        const { error: storageError } = await supabase.storage
+          .from('documents')
+          .remove([job.document_name]);
 
-      // Delete the processing job record
-      const { error: dbError } = await supabase
-        .from('processing_jobs')
-        .delete()
-        .eq('id', job.id);
+        if (storageError) {
+          console.log('Storage deletion result:', storageError.message);
+        } else {
+          console.log('File deleted from storage successfully');
+        }
 
-      if (dbError) {
-        console.error('Database deletion error:', dbError);
-        throw dbError;
+        // Delete the processing job record
+        const { error: dbError } = await supabase
+          .from('processing_jobs')
+          .delete()
+          .eq('id', job.id);
+
+        if (dbError) {
+          console.error('Database deletion error:', dbError);
+          throw dbError;
+        }
       }
 
       console.log('Database record deleted successfully');
