@@ -132,13 +132,21 @@ serve(async (req) => {
 
     console.log('File uploaded successfully:', uploadData.path);
 
+    // Extract basic text content from PDF (placeholder content for processing)
+    let basicContent = `Document: ${file.name}\nUploaded: ${new Date().toISOString()}\nFile size: ${file.size} bytes\nContent type: ${file.type}`;
+    
+    // For PDFs, we'll add a placeholder that indicates it needs processing
+    if (file.type.includes('pdf')) {
+      basicContent += `\n\n[PDF Content - Requires Processing]\nThis document contains PDF content that needs to be extracted and processed. File path: ${filePath}`;
+    }
+
     // Create document record
     const { data: documentData, error: documentError } = await supabase
       .from('documents')
       .insert({
         title: file.name,
         category: 'Legal Document', // Default category
-        content: '', // Will be populated during processing
+        content: basicContent, // Basic content for immediate processing
         file_path: uploadData.path,
         content_hash: contentHash,
         ingestion_status: 'pending',

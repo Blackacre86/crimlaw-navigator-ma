@@ -65,61 +65,89 @@ export default function Admin() {
     setStatus('Uploading document...');
 
     try {
-      // Upload file to storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      // Create FormData for upload-handler
+      const formData = new FormData();
+      formData.append('file', file);
       
       setProgress(30);
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(fileName, file);
+      setStatus('Creating document record...');
+
+      // Use upload-handler to create document and get documentId
+      console.log('🚀 Calling upload-handler edge function...', { fileName: file.name });
+      
+      const { data: uploadData, error: uploadError } = await supabase.functions.invoke('upload-handler', {
+        body: formData
+      });
+
+      console.log('📡 Upload handler response:', { data: uploadData, error: uploadError });
 
       if (uploadError) {
+        const errorMessage = uploadError.message || 'Unknown error occurred';
+        const errorDetails = {
+          fileName: file.name,
+          errorMessage: errorMessage,
+          functionError: uploadError
+        };
+        
+        console.error('❌ Document upload failed:', errorDetails);
+        
         showError({
           title: "Document Upload Failed",
-          message: `Failed to upload document to storage: ${uploadError.message}`,
+          message: `Failed to upload document: ${errorMessage}. Please check that the file is a valid PDF.`,
           component: "Admin",
           action: "document_upload",
-          metadata: { 
-            fileName: file.name,
-            fileSize: file.size,
-            errorCode: uploadError.message,
-            storageError: uploadError
-          }
+          metadata: errorDetails
         });
-        throw uploadError;
+        throw new Error(`Document upload failed: ${errorMessage}`);
+      }
+
+      if (!uploadData || !uploadData.document_id) {
+        const noDataError = {
+          fileName: file.name,
+          issue: 'No document ID returned from upload handler',
+          response: uploadData
+        };
+        
+        console.error('❌ No document ID returned from upload handler:', noDataError);
+        
+        showError({
+          title: "Document Upload Failed",
+          message: "Failed to create document record. The upload may have failed silently.",
+          component: "Admin", 
+          action: "document_upload",
+          metadata: noDataError
+        });
+        throw new Error('No document ID returned from upload handler');
       }
 
       setProgress(50);
-      setStatus('Document processing started in background. Check the processing status below.');
+      setStatus('Document uploaded successfully. Starting processing...');
 
-      // Call document processor edge function with enhanced error handling
-      console.log('🚀 Calling document-processor edge function...', { fileName, originalName: file.name });
+      // Now call process-document with the documentId
+      console.log('🚀 Calling process-document edge function...', { documentId: uploadData.document_id });
       
-      const { data, error } = await supabase.functions.invoke('document-processor', {
+      const { data: processData, error: processError } = await supabase.functions.invoke('process-document', {
         body: {
-          fileName,
-          originalName: file.name,
-        },
+          documentId: uploadData.document_id
+        }
       });
 
-      console.log('📡 Edge function response:', { data, error });
+      console.log('📡 Process document response:', { data: processData, error: processError });
 
-      if (error) {
-        const errorMessage = error.message || 'Unknown error occurred';
+      if (processError) {
+        const errorMessage = processError.message || 'Unknown error occurred';
         const errorDetails = {
           fileName: file.name,
-          uploadedFileName: fileName,
+          documentId: uploadData.document_id,
           errorMessage: errorMessage,
-          errorContext: error.context || 'Unknown context',
-          functionError: error
+          functionError: processError
         };
         
         console.error('❌ Document processing failed:', errorDetails);
         
         showError({
           title: "Document Processing Failed",
-          message: `Failed to start document processing: ${errorMessage}. Please check that all API keys are configured in Supabase settings.`,
+          message: `Failed to process document: ${errorMessage}. Please check that the OpenAI API key is configured correctly.`,
           component: "Admin",
           action: "document_processing",
           metadata: errorDetails
@@ -127,14 +155,14 @@ export default function Admin() {
         throw new Error(`Document processing failed: ${errorMessage}`);
       }
 
-      if (!data) {
+      if (!processData) {
         const noDataError = {
           fileName: file.name,
-          uploadedFileName: fileName,
-          issue: 'No response data from edge function'
+          documentId: uploadData.document_id,
+          issue: 'No response data from process-document function'
         };
         
-        console.error('❌ No data returned from edge function:', noDataError);
+        console.error('❌ No data returned from process-document function:', noDataError);
         
         showError({
           title: "Document Processing Failed",
@@ -147,7 +175,7 @@ export default function Admin() {
       }
 
       setProgress(100);
-      setStatus(`Processing started! Status: ${data.status}. Monitor progress below.`);
+      setStatus(`Document processed successfully! Created ${processData.chunksCreated || 0} chunks. Check the processing status below.`);
       
       toast({
         title: "Document processing started",
@@ -425,30 +453,27 @@ export default function Admin() {
                         <Button 
                           onClick={async () => {
                             try {
-                              setStatus('Testing document processor function...');
-                              console.log('🧪 Testing document-processor function...');
+                              setStatus('Testing process-document function...');
+                              console.log('🧪 Testing process-document function...');
                               
-                              const { data, error } = await supabase.functions.invoke('document-processor', {
-                                body: {
-                                  fileName: 'test-file.pdf',
-                                  originalName: 'Test Document.pdf'
-                                }
+                              const { data, error } = await supabase.functions.invoke('process-document', {
+                                body: {}
                               });
                               
                               console.log('🧪 Test response:', { data, error });
                               
                               if (error) {
-                                setStatus(`❌ Document processor test failed: ${error.message}`);
-                                console.error('❌ Document processor test failed:', error);
+                                setStatus(`❌ Process-document test failed: ${error.message}`);
+                                console.error('❌ Process-document test failed:', error);
                               } else if (data) {
-                                setStatus(`✅ Document processor responding! Request ID: ${data.requestId}`);
-                                console.log('✅ Document processor test successful:', data);
+                                setStatus(`✅ Process-document responding! Status: ${data.status || 'healthy'}`);
+                                console.log('✅ Process-document test successful:', data);
                                 toast({
-                                  title: "Document processor test successful",
+                                  title: "Process-document test successful",
                                   description: "The function is accessible and responding correctly",
                                 });
                               } else {
-                                setStatus(`❌ Document processor returned no data`);
+                                setStatus(`❌ Process-document returned no data`);
                               }
                             } catch (error: any) {
                               console.error('❌ Test error:', error);
@@ -458,7 +483,7 @@ export default function Admin() {
                           variant="outline"  
                           className="w-full"
                         >
-                          Test Document Processor
+                          Test Process Document
                         </Button>
                       </div>
                       
