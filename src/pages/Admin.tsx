@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
-import { Upload, FileText, CheckCircle, AlertCircle, Eye, Settings } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Upload, FileText, CheckCircle, AlertCircle, Eye, Settings, BarChart3, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast, errorToast } from '@/hooks/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { useErrorHandling } from '@/hooks/use-error-handling';
 import { ErrorDialog } from '@/components/ui/error-dialog';
 import { ErrorHistoryPanel } from '@/components/ErrorHistoryPanel';
@@ -20,6 +22,7 @@ import { ChunkingAnalytics } from '@/components/ChunkingAnalytics';
 import { EmbeddingAnalytics } from '@/components/EmbeddingAnalytics';
 import { ProcessingPipeline } from '@/components/ProcessingPipeline';
 import { HistoricalCharts } from '@/components/HistoricalCharts';
+import { TimingCharts } from '@/components/TimingCharts';
 import { useProcessingJobs } from '@/hooks/useProcessingJobs';
 
 export default function Admin() {
@@ -28,6 +31,7 @@ export default function Admin() {
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState('');
   const [progress, setProgress] = useState(0);
+  const [activeTab, setActiveTab] = useState('upload');
   const { toast } = useToast();
   const { showError, selectedError, setSelectedError } = useErrorHandling();
   const [showErrorDialog, setShowErrorDialog] = useState(false);
@@ -155,6 +159,9 @@ export default function Admin() {
       const input = document.getElementById('file-input') as HTMLInputElement;
       if (input) input.value = '';
       
+      // Switch to monitor tab to show progress
+      setActiveTab('monitor');
+      
       // Refresh jobs list to show the new job
       setTimeout(refreshJobs, 1000);
 
@@ -193,7 +200,7 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen p-6" style={{ background: 'var(--gradient-background)' }}>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
             Document Management
@@ -203,357 +210,342 @@ export default function Admin() {
           </p>
         </div>
 
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Upload className="h-5 w-5" />
-              Upload Document
-            </CardTitle>
-            <CardDescription>
-              Upload PDF documents to process and add to the searchable database
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="file-input">Select PDF Document</Label>
-              <div className="relative">
-                <Input
-                  id="file-input"
-                  type="file"
-                  accept=".pdf"
-                  onChange={handleFileSelect}
-                  disabled={uploading}
-                  className="w-full file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer file:text-sm"
-                />
-              </div>
-            </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid grid-cols-5 w-full">
+            <TabsTrigger value="upload">Upload</TabsTrigger>
+            <TabsTrigger value="monitor">Monitor</TabsTrigger>
+            <TabsTrigger value="metrics">Metrics</TabsTrigger>
+            <TabsTrigger value="errors">Errors</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+          </TabsList>
 
-            {file && (
-              <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg">
-                <FileText className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">{file.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                </span>
-              </div>
-            )}
+          <TabsContent value="upload" className="mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Upload className="h-5 w-5" />
+                  Upload Document
+                </CardTitle>
+                <CardDescription>
+                  Upload PDF documents to process and add to the searchable database
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="file-input">Select PDF Document</Label>
+                  <div className="relative">
+                    <Input
+                      id="file-input"
+                      type="file"
+                      accept=".pdf"
+                      onChange={handleFileSelect}
+                      disabled={uploading}
+                      className="w-full file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer file:text-sm"
+                    />
+                  </div>
+                </div>
 
-            <Button
-              onClick={handleUpload}
-              disabled={!file || uploading}
-              className="w-full"
-            >
-              {uploading ? 'Processing...' : 'Process Document'}
-            </Button>
+                {file && (
+                  <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">{file.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                    </span>
+                  </div>
+                )}
 
-            {uploading && (
-              <div className="space-y-2">
-                <Progress value={progress} className="w-full" />
-                <p className="text-sm text-muted-foreground text-center">
-                  {status}
-                </p>
-              </div>
-            )}
-
-            {status && !uploading && (
-              <Alert>
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>{status}</AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Comprehensive Metrics Dashboard */}
-        <div className="mb-8">
-          <MetricsDashboard />
-        </div>
-
-        {/* Analytics Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <ChunkingAnalytics />
-          <EmbeddingAnalytics />
-        </div>
-
-        {/* Processing Pipeline */}
-        <div className="mb-8">
-          <ProcessingPipeline />
-        </div>
-
-        {/* Historical Charts */}
-        <div className="mb-8">
-          <HistoricalCharts />
-        </div>
-
-        {/* Processing Jobs Monitor */}
-        <div className="mb-6">
-          <ProcessingJobsTable 
-            jobs={jobs} 
-            onRefresh={refreshJobs}
-            loading={jobsLoading}
-          />
-        </div>
-
-        {/* Error History Panel */}
-        <div className="mb-6">
-          <ErrorHistoryPanel />
-        </div>
-
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Enhanced RAG Pipeline Status</CardTitle>
-            <CardDescription>
-              Phase 2 advanced reasoning & feature integration - RAG-Fusion and OCR
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-sm font-medium text-green-800">RAG-Fusion</p>
-                <p className="text-xs text-green-600">Query Expansion</p>
-              </div>
-              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-sm font-medium text-green-800">Hybrid Search</p>
-                <p className="text-xs text-green-600">RRF Enabled</p>
-              </div>
-              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-sm font-medium text-green-800">OCR Ready</p>
-                <p className="text-xs text-green-600">Scanned PDFs</p>
-              </div>
-              <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
-                <p className="text-sm font-medium text-green-800">Cross-Encoder</p>
-                <p className="text-xs text-green-600">Re-ranking</p>
-              </div>
-            </div>
-          </CardContent>
-          </Card>
-
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                System Test
-              </CardTitle>
-              <CardDescription>
-                Test Edge Function connectivity and configuration
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Button 
-                  onClick={async () => {
-                    try {
-                      setStatus('Testing Edge Function connectivity...');
-                      const { data, error } = await supabase.functions.invoke('test-function', {
-                        body: { test: true, timestamp: new Date().toISOString() }
-                      });
-                      
-                      if (error) {
-                        setStatus(`❌ Test failed: ${error.message}`);
-                        showError({
-                          title: "Edge Function Test Failed",
-                          message: `The test function call failed: ${error.message}. Please check the Edge Function configuration and connectivity.`,
-                          component: "Admin",
-                          action: "test_edge_function",
-                          metadata: { 
-                            functionName: 'test-function',
-                            errorDetails: error
-                          }
-                        });
-                      } else {
-                        setStatus(`✅ Test successful! Function responded at ${data.timestamp}`);
-                        toast({
-                          title: "Test successful",
-                          description: "Edge Functions are working correctly",
-                        });
-                      }
-                    } catch (error: any) {
-                      setStatus(`❌ Test error: ${error.message}`);
-                      showError({
-                        title: "Test Connection Error",
-                        message: `An unexpected error occurred while testing Edge Functions: ${error.message}. This may indicate a network connectivity issue or service interruption.`,
-                        component: "Admin",
-                        action: "test_connection",
-                        metadata: { 
-                          errorType: error.constructor?.name || 'Unknown',
-                          errorStack: error.stack,
-                          timestamp: new Date().toISOString()
-                        }
-                      });
-                    }
-                  }}
-                  variant="outline"
+                <Button
+                  onClick={handleUpload}
+                  disabled={!file || uploading}
                   className="w-full"
                 >
-                  Test Edge Functions
+                  {uploading ? 'Processing...' : 'Process Document'}
                 </Button>
-                
-                <Button 
-                  onClick={async () => {
-                    try {
-                      setStatus('Testing document processor function...');
-                      console.log('🧪 Testing document-processor function...');
-                      
-                      const { data, error } = await supabase.functions.invoke('document-processor', {
-                        body: {
-                          fileName: 'test-file.pdf',
-                          originalName: 'Test Document.pdf'
-                        }
-                      });
-                      
-                      console.log('🧪 Test response:', { data, error });
-                      
-                      if (error) {
-                        setStatus(`❌ Document processor test failed: ${error.message}`);
-                        console.error('❌ Document processor test failed:', error);
-                      } else if (data) {
-                        setStatus(`✅ Document processor responding! Request ID: ${data.requestId}`);
-                        console.log('✅ Document processor test successful:', data);
-                        toast({
-                          title: "Document processor test successful",
-                          description: "The function is accessible and responding correctly",
-                        });
-                      } else {
-                        setStatus(`❌ Document processor returned no data`);
-                      }
-                    } catch (error: any) {
-                      console.error('❌ Test error:', error);
-                      setStatus(`❌ Test error: ${error.message}`);
-                    }
-                  }}
-                  variant="outline"  
-                  className="w-full"
-                >
-                  Test Document Processor
-                </Button>
-                
-                {status && (
+
+                {uploading && (
+                  <div className="space-y-2">
+                    <Progress value={progress} className="w-full" />
+                    <p className="text-sm text-muted-foreground text-center">
+                      {status}
+                    </p>
+                  </div>
+                )}
+
+                {status && !uploading && (
                   <Alert>
+                    <CheckCircle className="h-4 w-4" />
                     <AlertDescription>{status}</AlertDescription>
                   </Alert>
                 )}
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              Advanced Processing Configuration
-            </CardTitle>
-            <CardDescription>
-              Configure advanced features for enhanced document processing and search
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div>
-              <h4 className="font-medium mb-3 flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                LlamaParse (Enhanced PDF Processing)
-              </h4>
-              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                <p className="text-sm text-blue-700 mb-3">
-                  LlamaParse provides superior extraction of complex layouts, tables, footnotes, and structured legal documents.
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <a href="https://cloud.llamaindex.ai" target="_blank" rel="noopener noreferrer">
-                      Get Free API Key
-                    </a>
-                  </Button>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href="https://supabase.com/dashboard/project/lzssqygnetvznmfubwmr/settings/functions" target="_blank" rel="noopener noreferrer">
-                      Add to Supabase Secrets
-                    </a>
-                  </Button>
-                </div>
-                <p className="text-xs text-blue-600 mt-2">
-                  Secret name: <code className="bg-blue-100 px-1 rounded">LLAMA_CLOUD_API_KEY</code>
-                </p>
+          <TabsContent value="monitor" className="mt-6">
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <ProcessingStats stats={stats} />
+              </div>
+              
+              <ScrollArea className="h-[60vh] rounded-md border">
+                <ProcessingJobsTable 
+                  jobs={jobs} 
+                  onRefresh={refreshJobs}
+                  loading={jobsLoading}
+                />
+              </ScrollArea>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="metrics" className="mt-6">
+            <div className="space-y-6">
+              <MetricsDashboard />
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <ChunkingAnalytics />
+                <EmbeddingAnalytics />
+              </div>
+              
+              <ProcessingPipeline />
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <HistoricalCharts />
+                <TimingCharts />
               </div>
             </div>
+          </TabsContent>
 
-            <Separator />
+          <TabsContent value="errors" className="mt-6">
+            <ErrorHistoryPanel />
+          </TabsContent>
 
-            <div>
-              <h4 className="font-medium mb-3 flex items-center gap-2">
-                <Eye className="h-4 w-4" />
-                OCR.Space (Scanned Document Processing)
-              </h4>
-              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
-                <p className="text-sm text-green-700 mb-3">
-                  Automatically processes scanned PDFs when text extraction yields minimal content. Perfect for older legal documents and evidence files.
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <a href="https://ocr.space/ocrapi" target="_blank" rel="noopener noreferrer">
-                      Get Free OCR API Key
-                    </a>
-                  </Button>
-                  <Button variant="outline" size="sm" asChild>
-                    <a href="https://supabase.com/dashboard/project/lzssqygnetvznmfubwmr/settings/functions" target="_blank" rel="noopener noreferrer">
-                      Add to Supabase Secrets
-                    </a>
-                  </Button>
-                </div>
-                <p className="text-xs text-green-600 mt-2">
-                  Secret name: <code className="bg-green-100 px-1 rounded">OCR_SPACE_API_KEY</code>
-                </p>
-              </div>
+          <TabsContent value="settings" className="mt-6">
+            <div className="space-y-6">
+              <Accordion type="single" collapsible>
+                <AccordionItem value="pipeline-status">
+                  <AccordionTrigger>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5" />
+                      Enhanced RAG Pipeline Status
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Phase 2 advanced reasoning & feature integration - RAG-Fusion and OCR
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                          <p className="text-sm font-medium text-green-800">RAG-Fusion</p>
+                          <p className="text-xs text-green-600">Query Expansion</p>
+                        </div>
+                        <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                          <p className="text-sm font-medium text-green-800">Hybrid Search</p>
+                          <p className="text-xs text-green-600">RRF Enabled</p>
+                        </div>
+                        <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                          <p className="text-sm font-medium text-green-800">OCR Ready</p>
+                          <p className="text-xs text-green-600">Scanned PDFs</p>
+                        </div>
+                        <div className="text-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <CheckCircle className="h-6 w-6 text-green-600 mx-auto mb-1" />
+                          <p className="text-sm font-medium text-green-800">Cross-Encoder</p>
+                          <p className="text-xs text-green-600">Re-ranking</p>
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="system-tests">
+                  <AccordionTrigger>
+                    <div className="flex items-center gap-2">
+                      <Settings className="h-5 w-5" />
+                      System Tests
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Test Edge Function connectivity and configuration
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Button 
+                          onClick={async () => {
+                            try {
+                              setStatus('Testing Edge Function connectivity...');
+                              const { data, error } = await supabase.functions.invoke('test-function', {
+                                body: { test: true, timestamp: new Date().toISOString() }
+                              });
+                              
+                              if (error) {
+                                setStatus(`❌ Test failed: ${error.message}`);
+                                showError({
+                                  title: "Edge Function Test Failed",
+                                  message: `The test function call failed: ${error.message}. Please check the Edge Function configuration and connectivity.`,
+                                  component: "Admin",
+                                  action: "test_edge_function",
+                                  metadata: { 
+                                    functionName: 'test-function',
+                                    errorDetails: error
+                                  }
+                                });
+                              } else {
+                                setStatus(`✅ Test successful! Function responded at ${data.timestamp}`);
+                                toast({
+                                  title: "Test successful",
+                                  description: "Edge Functions are working correctly",
+                                });
+                              }
+                            } catch (error: any) {
+                              setStatus(`❌ Test error: ${error.message}`);
+                              showError({
+                                title: "Test Connection Error",
+                                message: `An unexpected error occurred while testing Edge Functions: ${error.message}. This may indicate a network connectivity issue or service interruption.`,
+                                component: "Admin",
+                                action: "test_connection",
+                                metadata: { 
+                                  errorType: error.constructor?.name || 'Unknown',
+                                  errorStack: error.stack,
+                                  timestamp: new Date().toISOString()
+                                }
+                              });
+                            }
+                          }}
+                          variant="outline"
+                          className="w-full"
+                        >
+                          Test Edge Functions
+                        </Button>
+                        
+                        <Button 
+                          onClick={async () => {
+                            try {
+                              setStatus('Testing document processor function...');
+                              console.log('🧪 Testing document-processor function...');
+                              
+                              const { data, error } = await supabase.functions.invoke('document-processor', {
+                                body: {
+                                  fileName: 'test-file.pdf',
+                                  originalName: 'Test Document.pdf'
+                                }
+                              });
+                              
+                              console.log('🧪 Test response:', { data, error });
+                              
+                              if (error) {
+                                setStatus(`❌ Document processor test failed: ${error.message}`);
+                                console.error('❌ Document processor test failed:', error);
+                              } else if (data) {
+                                setStatus(`✅ Document processor responding! Request ID: ${data.requestId}`);
+                                console.log('✅ Document processor test successful:', data);
+                                toast({
+                                  title: "Document processor test successful",
+                                  description: "The function is accessible and responding correctly",
+                                });
+                              } else {
+                                setStatus(`❌ Document processor returned no data`);
+                              }
+                            } catch (error: any) {
+                              console.error('❌ Test error:', error);
+                              setStatus(`❌ Test error: ${error.message}`);
+                            }
+                          }}
+                          variant="outline"  
+                          className="w-full"
+                        >
+                          Test Document Processor
+                        </Button>
+                      </div>
+                      
+                      {status && (
+                        <Alert>
+                          <AlertDescription>{status}</AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="processing-config">
+                  <AccordionTrigger>
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      Processing Configuration
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Configure processing methods and optimization settings
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="processing-method">Processing Method</Label>
+                          <select 
+                            id="processing-method"
+                            className="w-full p-2 border rounded-md bg-background"
+                            defaultValue="llamaparse"
+                          >
+                            <option value="llamaparse">LlamaParse (Recommended)</option>
+                            <option value="basic">Basic PDF Extraction</option>
+                            <option value="ocr">OCR.Space (Scanned PDFs)</option>
+                          </select>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="chunk-size">Chunk Size</Label>
+                          <select 
+                            id="chunk-size"
+                            className="w-full p-2 border rounded-md bg-background"
+                            defaultValue="1000"
+                          >
+                            <option value="500">500 characters</option>
+                            <option value="1000">1000 characters</option>
+                            <option value="1500">1500 characters</option>
+                            <option value="2000">2000 characters</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="overlap">Chunk Overlap</Label>
+                          <select 
+                            id="overlap"
+                            className="w-full p-2 border rounded-md bg-background"
+                            defaultValue="200"
+                          >
+                            <option value="100">100 characters</option>
+                            <option value="200">200 characters</option>
+                            <option value="300">300 characters</option>
+                          </select>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="embedding-model">Embedding Model</Label>
+                          <select 
+                            id="embedding-model"
+                            className="w-full p-2 border rounded-md bg-background"
+                            defaultValue="text-embedding-3-small"
+                          >
+                            <option value="text-embedding-3-small">text-embedding-3-small</option>
+                            <option value="text-embedding-3-large">text-embedding-3-large</option>
+                            <option value="text-embedding-ada-002">text-embedding-ada-002</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
             </div>
-
-            <div className="bg-purple-50 border border-purple-200 p-4 rounded-lg">
-              <h5 className="font-medium text-purple-900 mb-2">
-                ✨ New: RAG-Fusion Search Technology
-              </h5>
-              <p className="text-sm text-purple-800 mb-3">
-                The search system now uses RAG-Fusion with intelligent query expansion. Each search automatically:
-              </p>
-              <ul className="text-sm space-y-1 text-purple-700">
-                <li>• Generates 3 alternative legal query variations using GPT-4o</li>
-                <li>• Executes parallel searches for original + expanded queries</li>
-                <li>• Fuses results using Reciprocal Rank Fusion (RRF) algorithm</li>
-                <li>• Bridges terminology gaps between novice and expert users</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Processing Pipeline</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center p-4 bg-secondary rounded-lg">
-                <Upload className="h-8 w-8 text-primary mx-auto mb-2" />
-                <h3 className="font-semibold mb-1">Enhanced Upload</h3>
-                <p className="text-sm text-muted-foreground">
-                  LlamaParse + structure-aware extraction
-                </p>
-              </div>
-              <div className="text-center p-4 bg-secondary rounded-lg">
-                <FileText className="h-8 w-8 text-primary mx-auto mb-2" />
-                <h3 className="font-semibold mb-1">Smart Chunking</h3>
-                <p className="text-sm text-muted-foreground">
-                  Preserve legal document hierarchy
-                </p>
-              </div>
-              <div className="text-center p-4 bg-secondary rounded-lg">
-                <CheckCircle className="h-8 w-8 text-primary mx-auto mb-2" />
-                <h3 className="font-semibold mb-1">Hybrid Index</h3>
-                <p className="text-sm text-muted-foreground">
-                  Vector + keyword search with re-ranking
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Error Dialog */}

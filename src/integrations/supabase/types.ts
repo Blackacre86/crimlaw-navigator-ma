@@ -95,63 +95,81 @@ export type Database = {
       processing_jobs: {
         Row: {
           api_calls: number | null
+          chunk_ms: number | null
           chunk_size_avg: number | null
           chunks_processed: number | null
           completed_at: string | null
           cost_estimate: number | null
           created_at: string
           document_name: string
+          embed_ms: number | null
           embedding_time_ms: number | null
           error_message: string | null
           id: string
           original_name: string
+          parse_ms: number | null
+          pginsert_ms: number | null
           processing_method: string | null
           processing_rate: number | null
           started_at: string | null
           status: string
           token_count: number | null
           total_chunks: number | null
+          total_ms: number | null
           updated_at: string
+          upload_ms: number | null
         }
         Insert: {
           api_calls?: number | null
+          chunk_ms?: number | null
           chunk_size_avg?: number | null
           chunks_processed?: number | null
           completed_at?: string | null
           cost_estimate?: number | null
           created_at?: string
           document_name: string
+          embed_ms?: number | null
           embedding_time_ms?: number | null
           error_message?: string | null
           id?: string
           original_name: string
+          parse_ms?: number | null
+          pginsert_ms?: number | null
           processing_method?: string | null
           processing_rate?: number | null
           started_at?: string | null
           status?: string
           token_count?: number | null
           total_chunks?: number | null
+          total_ms?: number | null
           updated_at?: string
+          upload_ms?: number | null
         }
         Update: {
           api_calls?: number | null
+          chunk_ms?: number | null
           chunk_size_avg?: number | null
           chunks_processed?: number | null
           completed_at?: string | null
           cost_estimate?: number | null
           created_at?: string
           document_name?: string
+          embed_ms?: number | null
           embedding_time_ms?: number | null
           error_message?: string | null
           id?: string
           original_name?: string
+          parse_ms?: number | null
+          pginsert_ms?: number | null
           processing_method?: string | null
           processing_rate?: number | null
           started_at?: string | null
           status?: string
           token_count?: number | null
           total_chunks?: number | null
+          total_ms?: number | null
           updated_at?: string
+          upload_ms?: number | null
         }
         Relationships: []
       }

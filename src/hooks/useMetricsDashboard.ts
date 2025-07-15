@@ -56,10 +56,10 @@ export function useMetricsDashboard() {
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
 
-      // Fetch processing jobs data
+      // Fetch processing jobs data including timing columns
       const { data: jobs, error: jobsError } = await supabase
         .from('processing_jobs')
-        .select('*')
+        .select('*, upload_ms, parse_ms, chunk_ms, embed_ms, pginsert_ms, total_ms')
         .order('created_at', { ascending: false });
 
       if (jobsError) throw jobsError;

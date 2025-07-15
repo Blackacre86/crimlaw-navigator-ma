@@ -54,53 +54,56 @@ export default function ProcessingStats({ stats }: ProcessingStatsProps) {
     }
   ];
 
+  const essentialStats = [
+    {
+      label: 'Active Jobs',
+      value: stats.processing,
+      icon: RefreshCw,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50 border-blue-200',
+      animate: stats.processing > 0
+    },
+    {
+      label: 'Queue Length',
+      value: stats.queued,
+      icon: Clock,
+      color: 'text-yellow-600',
+      bgColor: 'bg-yellow-50 border-yellow-200'
+    },
+    {
+      label: 'Success Rate',
+      value: `${stats.successRate}%`,
+      icon: CheckCircle,
+      color: 'text-green-600',
+      bgColor: 'bg-green-50 border-green-200'
+    },
+    {
+      label: 'Avg Time',
+      value: '15s', // This will be updated to use actual timing data
+      icon: BarChart3,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-50 border-purple-200'
+    }
+  ];
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Processing Statistics
-          </div>
-          {stats.total > 0 && (
-            <Badge variant={stats.successRate >= 80 ? 'secondary' : 'destructive'}>
-              {stats.successRate}% Success Rate
-            </Badge>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {statItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <div
-                key={item.label}
-                className={`text-center p-3 border rounded-lg ${item.bgColor}`}
-              >
-                <Icon className={`h-6 w-6 mx-auto mb-1 ${item.color} ${item.animate ? 'animate-spin' : ''}`} />
-                <p className="text-2xl font-bold">{item.value}</p>
-                <p className="text-xs font-medium">{item.label}</p>
+    <>
+      {essentialStats.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Card key={item.label} className="p-4">
+            <div className="flex items-center space-x-2">
+              <div className={`p-2 rounded-lg ${item.bgColor}`}>
+                <Icon className={`h-5 w-5 ${item.color} ${item.animate ? 'animate-spin' : ''}`} />
               </div>
-            );
-          })}
-        </div>
-        
-        {stats.total > 0 && (
-          <div className="mt-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Today's Activity</span>
-              <span className="font-medium">{stats.total} documents processed</span>
+              <div className="flex-1">
+                <p className="text-2xl font-bold">{item.value}</p>
+                <p className="text-sm text-muted-foreground">{item.label}</p>
+              </div>
             </div>
-            <div className="w-full bg-secondary rounded-full h-2">
-              <div 
-                className="bg-primary h-2 rounded-full transition-all duration-500" 
-                style={{ width: `${stats.successRate}%` }}
-              />
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          </Card>
+        );
+      })}
+    </>
   );
 }
