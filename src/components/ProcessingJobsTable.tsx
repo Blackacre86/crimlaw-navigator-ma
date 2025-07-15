@@ -5,7 +5,7 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { RefreshCw, Clock, CheckCircle, XCircle, AlertTriangle, Eye } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle, XCircle, AlertTriangle, Eye, Trash2, Info } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Tables } from '@/integrations/supabase/types';
@@ -89,6 +89,65 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
     }
   };
 
+  const handleDelete = async (job: ProcessingJob) => {
+    if (!confirm(`Are you sure you want to delete the processing job for "${job.original_name}"?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('processing_jobs')
+        .delete()
+        .eq('id', job.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Job deleted",
+        description: `Processing job for "${job.original_name}" has been deleted.`,
+      });
+
+      onRefresh();
+    } catch (error: any) {
+      toast({
+        title: "Delete failed",
+        description: error.message || "Failed to delete processing job",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const showProcessingDetails = (job: ProcessingJob) => {
+    const details = [];
+    
+    if (job.processing_method) {
+      details.push(`Extraction Method: ${job.processing_method}`);
+    }
+    
+    if (job.chunks_processed && job.total_chunks) {
+      details.push(`Chunking Progress: ${job.chunks_processed}/${job.total_chunks} chunks processed`);
+      details.push(`Embedding Generation: ${job.chunks_processed} embeddings created`);
+    }
+    
+    if (job.started_at) {
+      details.push(`Started: ${new Date(job.started_at).toLocaleString()}`);
+    }
+    
+    if (job.completed_at) {
+      details.push(`Completed: ${new Date(job.completed_at).toLocaleString()}`);
+    }
+
+    if (job.status === 'processing') {
+      details.push('Current Stage: Chunking and embedding generation');
+      details.push('Token validation and structure preservation in progress');
+    }
+
+    toast({
+      title: `Processing Details: ${job.original_name}`,
+      description: details.join('\n'),
+    });
+  };
+
   if (jobs.length === 0) {
     return (
       <Card>
@@ -140,6 +199,7 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
                 <TableHead>Progress</TableHead>
                 <TableHead>Method</TableHead>
                 <TableHead>Duration</TableHead>
+                <TableHead>Details</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -180,6 +240,16 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
                     </div>
                   </TableCell>
                   <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => showProcessingDetails(job)}
+                      title="View processing details"
+                    >
+                      <Info className="h-3 w-3" />
+                    </Button>
+                  </TableCell>
+                  <TableCell>
                     <div className="flex gap-2">
                       {job.status === 'failed' && (
                         <Button
@@ -206,6 +276,15 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
                           <AlertTriangle className="h-3 w-3" />
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(job)}
+                        className="text-destructive hover:text-destructive"
+                        title="Delete processing job"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>

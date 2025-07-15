@@ -141,13 +141,16 @@ export default function Admin() {
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="file-input">Select PDF Document</Label>
-              <Input
-                id="file-input"
-                type="file"
-                accept=".pdf"
-                onChange={handleFileSelect}
-                disabled={uploading}
-              />
+              <div className="relative">
+                <Input
+                  id="file-input"
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileSelect}
+                  disabled={uploading}
+                  className="file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
+                />
+              </div>
             </div>
 
             {file && (
