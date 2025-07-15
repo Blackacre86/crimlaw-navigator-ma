@@ -15,6 +15,11 @@ import { ErrorDialog } from '@/components/ui/error-dialog';
 import { ErrorHistoryPanel } from '@/components/ErrorHistoryPanel';
 import ProcessingJobsTable from '@/components/ProcessingJobsTable';
 import ProcessingStats from '@/components/ProcessingStats';
+import { MetricsDashboard } from '@/components/MetricsDashboard';
+import { ChunkingAnalytics } from '@/components/ChunkingAnalytics';
+import { EmbeddingAnalytics } from '@/components/EmbeddingAnalytics';
+import { ProcessingPipeline } from '@/components/ProcessingPipeline';
+import { HistoricalCharts } from '@/components/HistoricalCharts';
 import { useProcessingJobs } from '@/hooks/useProcessingJobs';
 
 export default function Admin() {
@@ -259,9 +264,25 @@ export default function Admin() {
           </CardContent>
         </Card>
 
-        {/* Processing Statistics */}
+        {/* Comprehensive Metrics Dashboard */}
         <div className="mb-6">
-          <ProcessingStats stats={stats} />
+          <MetricsDashboard />
+        </div>
+
+        {/* Analytics Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <ChunkingAnalytics />
+          <EmbeddingAnalytics />
+        </div>
+
+        {/* Processing Pipeline */}
+        <div className="mb-6">
+          <ProcessingPipeline />
+        </div>
+
+        {/* Historical Charts */}
+        <div className="mb-6">
+          <HistoricalCharts />
         </div>
 
         {/* Processing Jobs Monitor */}
