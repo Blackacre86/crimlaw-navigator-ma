@@ -265,23 +265,23 @@ export default function Admin() {
         </Card>
 
         {/* Comprehensive Metrics Dashboard */}
-        <div className="mb-6">
+        <div className="mb-8">
           <MetricsDashboard />
         </div>
 
         {/* Analytics Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <ChunkingAnalytics />
           <EmbeddingAnalytics />
         </div>
 
         {/* Processing Pipeline */}
-        <div className="mb-6">
+        <div className="mb-8">
           <ProcessingPipeline />
         </div>
 
         {/* Historical Charts */}
-        <div className="mb-6">
+        <div className="mb-8">
           <HistoricalCharts />
         </div>
 

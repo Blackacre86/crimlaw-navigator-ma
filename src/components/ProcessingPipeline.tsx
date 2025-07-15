@@ -116,7 +116,7 @@ export const ProcessingPipeline = () => {
             {/* Pipeline Flow */}
             <div className="flex items-center justify-between mb-6">
               {analytics.pipelineStages.map((stage, index) => (
-                <React.Fragment key={stage.stage}>
+                <div key={stage.stage} className="flex items-center">
                   <div className="flex flex-col items-center space-y-2">
                     <div className={cn(
                       "w-16 h-16 rounded-full border-2 flex items-center justify-center transition-colors",
@@ -133,9 +133,9 @@ export const ProcessingPipeline = () => {
                     </div>
                   </div>
                   {index < analytics.pipelineStages.length - 1 && (
-                    <ArrowRight className="h-6 w-6 text-muted-foreground" />
+                    <ArrowRight className="h-6 w-6 text-muted-foreground mx-4" />
                   )}
-                </React.Fragment>
+                </div>
               ))}
             </div>
 

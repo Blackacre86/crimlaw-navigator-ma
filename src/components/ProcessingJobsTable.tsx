@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -25,6 +25,16 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
   const { showError, selectedError, setSelectedError } = useErrorHandling();
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Update current time every second for real-time duration display
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -51,12 +61,22 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
     if (job.total_chunks && job.chunks_processed) {
       return Math.round((job.chunks_processed / job.total_chunks) * 100);
     }
-    return job.status === 'processing' ? 15 : 0;
+    // Better progress estimation for processing jobs
+    if (job.status === 'processing') {
+      // If no chunk info, estimate based on processing stage
+      if (job.started_at) {
+        const processingTime = (currentTime.getTime() - new Date(job.started_at).getTime()) / 1000;
+        // Rough estimation: 1-2 minutes per document on average
+        return Math.min(Math.round((processingTime / 120) * 100), 90);
+      }
+      return 25;
+    }
+    return job.status === 'queued' ? 0 : 10;
   };
 
   const getProcessingTime = (job: ProcessingJob) => {
     const start = job.started_at ? new Date(job.started_at) : new Date(job.created_at);
-    const end = job.completed_at ? new Date(job.completed_at) : new Date();
+    const end = job.completed_at ? new Date(job.completed_at) : currentTime;
     const diffMs = end.getTime() - start.getTime();
     const diffSeconds = Math.floor(diffMs / 1000);
     
@@ -102,6 +122,17 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
   };
 
   const handleDelete = async (job: ProcessingJob) => {
+    // Check if any jobs are currently processing
+    const processingJobs = jobs.filter(j => j.status === 'processing');
+    if (processingJobs.length > 0 && job.status !== 'processing') {
+      toast({
+        title: "Cannot delete job",
+        description: "Wait for current processing jobs to complete before deleting other jobs.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!confirm(`Are you sure you want to delete the processing job for "${job.original_name}"?`)) {
       return;
     }
@@ -350,8 +381,13 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
                         variant="ghost"
                         size="sm"
                         onClick={() => handleDelete(job)}
-                        className="text-destructive hover:text-destructive"
-                        title="Delete processing job"
+                        disabled={jobs.some(j => j.status === 'processing' && j.id !== job.id)}
+                        className="text-destructive hover:text-destructive disabled:opacity-50"
+                        title={
+                          jobs.some(j => j.status === 'processing' && j.id !== job.id) 
+                            ? "Cannot delete while other jobs are processing"
+                            : "Delete processing job"
+                        }
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
