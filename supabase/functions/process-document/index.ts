@@ -228,50 +228,82 @@ serve(async (req) => {
   }
 });
 
-// Function to chunk text into smaller pieces
-function chunkText(text: string, maxChunkSize = 1000, overlap = 200): ChunkData[] {
-  const chunks: ChunkData[] = [];
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+// Function to chunk text using legal document chunking strategy
+function chunkText(text: string, maxChunkSize = 3200, overlap = 200): ChunkData[] {
+  console.log('🔧 Using legal-optimized chunking strategy');
   
-  let currentChunk = '';
+  // Legal document chunking that preserves structure
+  const chunks: ChunkData[] = [];
+  
+  // First try to split by sections/headers (legal structure preservation)
+  const sectionPattern = /(?:\n\s*(?:SECTION|RULE|CHAPTER|PART|§)\s*[\d\w\.]+[^\n]*\n)/gi;
+  const sections = text.split(sectionPattern);
+  
   let chunkIndex = 0;
   
-  for (const sentence of sentences) {
-    const trimmedSentence = sentence.trim();
+  for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+    let section = sections[sectionIndex].trim();
     
-    // If adding this sentence would exceed the max size, save current chunk and start new one
-    if (currentChunk.length + trimmedSentence.length > maxChunkSize && currentChunk.length > 0) {
+    if (!section) continue;
+    
+    // If section is small enough, make it one chunk
+    if (section.length <= maxChunkSize) {
       chunks.push({
-        content: currentChunk.trim(),
-        chunk_index: chunkIndex,
+        content: section,
+        chunk_index: chunkIndex++,
         metadata: {
-          word_count: currentChunk.trim().split(' ').length,
-          char_count: currentChunk.trim().length
+          section_index: sectionIndex,
+          word_count: section.split(' ').length,
+          char_count: section.length,
+          chunk_type: 'legal_section'
         }
       });
-      
-      // Start new chunk with overlap from previous chunk
-      const words = currentChunk.trim().split(' ');
-      const overlapWords = words.slice(-Math.floor(overlap / 10)); // Approximate word overlap
-      currentChunk = overlapWords.join(' ') + ' ' + trimmedSentence;
-      chunkIndex++;
     } else {
-      currentChunk += (currentChunk ? ' ' : '') + trimmedSentence;
+      // Split large sections by paragraphs, preserving legal context
+      const paragraphs = section.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+      let currentChunk = '';
+      
+      for (const paragraph of paragraphs) {
+        const trimmedParagraph = paragraph.trim();
+        
+        if (currentChunk.length + trimmedParagraph.length > maxChunkSize && currentChunk.length > 0) {
+          chunks.push({
+            content: currentChunk.trim(),
+            chunk_index: chunkIndex++,
+            metadata: {
+              section_index: sectionIndex,
+              word_count: currentChunk.trim().split(' ').length,
+              char_count: currentChunk.trim().length,
+              chunk_type: 'legal_paragraph_group'
+            }
+          });
+          
+          // Start new chunk with some overlap
+          const sentences = currentChunk.trim().split(/[.!?]+/).filter(s => s.trim().length > 0);
+          const overlapSentences = sentences.slice(-2); // Keep last 2 sentences for context
+          currentChunk = overlapSentences.join('. ') + (overlapSentences.length > 0 ? '. ' : '') + trimmedParagraph;
+        } else {
+          currentChunk += (currentChunk ? '\n\n' : '') + trimmedParagraph;
+        }
+      }
+      
+      // Add final chunk from this section
+      if (currentChunk.trim().length > 0) {
+        chunks.push({
+          content: currentChunk.trim(),
+          chunk_index: chunkIndex++,
+          metadata: {
+            section_index: sectionIndex,
+            word_count: currentChunk.trim().split(' ').length,
+            char_count: currentChunk.trim().length,
+            chunk_type: 'legal_paragraph_group'
+          }
+        });
+      }
     }
   }
   
-  // Add final chunk if it has content
-  if (currentChunk.trim().length > 0) {
-    chunks.push({
-      content: currentChunk.trim(),
-      chunk_index: chunkIndex,
-      metadata: {
-        word_count: currentChunk.trim().split(' ').length,
-        char_count: currentChunk.trim().length
-      }
-    });
-  }
-  
+  console.log(`📊 Legal chunking created ${chunks.length} chunks with preserved structure`);
   return chunks;
 }
 
