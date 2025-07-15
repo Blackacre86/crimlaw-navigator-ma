@@ -351,6 +351,45 @@ export type Database = {
         }
         Relationships: []
       }
+      query_logs: {
+        Row: {
+          answer: string
+          chunks_processed: number | null
+          confidence: number | null
+          created_at: string
+          id: string
+          query: string
+          response_time_ms: number | null
+          sources: Json
+          tokens_used: number | null
+          user_id: string | null
+        }
+        Insert: {
+          answer: string
+          chunks_processed?: number | null
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          query: string
+          response_time_ms?: number | null
+          sources?: Json
+          tokens_used?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          answer?: string
+          chunks_processed?: number | null
+          confidence?: number | null
+          created_at?: string
+          id?: string
+          query?: string
+          response_time_ms?: number | null
+          sources?: Json
+          tokens_used?: number | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
