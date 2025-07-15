@@ -106,6 +106,17 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
     }
 
     try {
+      // First try to delete the file from storage if it exists
+      const { error: storageError } = await supabase.storage
+        .from('documents')
+        .remove([job.document_name]);
+
+      // Don't throw on storage error since the file might not exist or might have been cleaned up
+      if (storageError) {
+        console.warn('File not found in storage or already deleted:', storageError.message);
+      }
+
+      // Delete the processing job record
       const { error } = await supabase
         .from('processing_jobs')
         .delete()
@@ -118,7 +129,8 @@ export default function ProcessingJobsTable({ jobs, onRefresh, loading = false }
         description: `Processing job for "${job.original_name}" has been deleted.`,
       });
 
-      onRefresh();
+      // Force refresh the jobs list
+      setTimeout(onRefresh, 500);
     } catch (error: any) {
       showError({
         title: "Job Deletion Failed",

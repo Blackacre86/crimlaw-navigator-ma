@@ -32,8 +32,7 @@ export default function AppLayout() {
   const isAdmin = profile?.role === 'admin';
 
   return (
-    <div className="h-screen flex bg-gradient-to-br from-background via-background to-accent"
-         style={{ background: 'var(--gradient-background)' }}>
+    <div className="h-screen flex bg-gradient-background">
       {/* Left Sidebar */}
       <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} bg-sidebar border-r border-sidebar-border transition-all duration-300 flex flex-col`}>
         {/* Logo */}
@@ -162,8 +161,7 @@ export default function AppLayout() {
         </div>
 
         {/* Right Panel - AI Co-Pilot */}
-        <div className={`${aiPanelCollapsed ? 'w-12' : 'w-80'} border-l border-border transition-all duration-300 fixed right-0 top-0 h-full z-10`}
-             style={{ background: 'var(--gradient-card)' }}>
+        <div className={`${aiPanelCollapsed ? 'w-12' : 'w-80'} border-l border-border transition-all duration-300 fixed right-0 top-0 h-full z-10 bg-gradient-card`}>
           {aiPanelCollapsed ? (
             <div className="p-2">
               <Button

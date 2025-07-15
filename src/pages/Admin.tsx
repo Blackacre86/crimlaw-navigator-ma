@@ -157,7 +157,7 @@ export default function Admin() {
   }
 
   return (
-    <div className="min-h-screen p-6" style={{ background: 'var(--gradient-background)' }}>
+    <div className="min-h-screen p-6 bg-gradient-background">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
@@ -188,7 +188,7 @@ export default function Admin() {
                   accept=".pdf"
                   onChange={handleFileSelect}
                   disabled={uploading}
-                  className="file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer"
+                  className="w-full file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 file:cursor-pointer cursor-pointer file:text-sm"
                 />
               </div>
             </div>
