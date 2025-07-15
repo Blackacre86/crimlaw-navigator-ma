@@ -4,83 +4,156 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.5';
 import { corsHeaders } from "../_shared/cors.ts";
 
 serve(async (req) => {
+  const startTime = Date.now();
+  
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const { query } = await req.json();
+  // Health check endpoint
+  if (req.method === 'GET') {
+    const healthCheck = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      service: 'semantic-search',
+      version: '1.0.0',
+      environment: {
+        openai_configured: !!Deno.env.get('OPENAI_API_KEY'),
+        supabase_configured: !!Deno.env.get('SUPABASE_URL')
+      }
+    };
+    
+    return new Response(JSON.stringify(healthCheck), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
 
+  try {
+    const requestBody = await req.json();
+    const { query } = requestBody;
+    
+    // Enhanced input validation
     if (!query || typeof query !== 'string') {
+      console.error('Invalid query provided:', { query: typeof query });
       return new Response(
-        JSON.stringify({ error: 'Query is required and must be a string' }),
+        JSON.stringify({ 
+          error: 'Query is required and must be a string',
+          details: 'Please provide a valid search query'
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    if (query.length > 1000) {
+      console.error('Query too long:', query.length);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Query too long',
+          details: 'Query must be less than 1000 characters'
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Sanitize query input
+    const sanitizedQuery = query.trim().replace(/[<>]/g, '');
+    
+    // Environment validation
     const openAIApiKey = Deno.env.get('OPENAI_API_KEY');
     if (!openAIApiKey) {
       console.error('OpenAI API key not found in environment variables');
       return new Response(
-        JSON.stringify({ error: 'OpenAI API key not configured' }),
+        JSON.stringify({ 
+          error: 'OpenAI API key not configured',
+          details: 'Please configure the OPENAI_API_KEY secret' 
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    // Initialize Supabase client with error handling
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Supabase configuration missing');
+      return new Response(
+        JSON.stringify({ 
+          error: 'Database configuration error',
+          details: 'Supabase connection not properly configured'
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log('Processing query:', query);
+    console.log('Processing query:', sanitizedQuery);
+    console.log('Request ID:', crypto.randomUUID());
 
-    // Step 1: RAG-Fusion Query Expansion
+    // Step 1: RAG-Fusion Query Expansion with timing
+    const queryExpansionStart = Date.now();
     console.log('Generating query variations for RAG-Fusion...');
-    const queryVariations = await generateQueryVariations(query, openAIApiKey);
-    const allQueries = [query, ...queryVariations];
+    const queryVariations = await generateQueryVariations(sanitizedQuery, openAIApiKey);
+    const allQueries = [sanitizedQuery, ...queryVariations];
+    const queryExpansionTime = Date.now() - queryExpansionStart;
+    console.log(`Query expansion completed in ${queryExpansionTime}ms`);
     console.log('Generated queries:', allQueries);
 
-    // Step 2: Generate embeddings for all query variations
+    // Step 2: Generate embeddings for all query variations with timing
+    const embeddingStart = Date.now();
     const embeddingResponses = await Promise.all(
-      allQueries.map(async (q) => {
-        const response = await fetch('https://api.openai.com/v1/embeddings', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${openAIApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'text-embedding-3-small',
-            input: q,
-          }),
-        });
+      allQueries.map(async (q, index) => {
+        try {
+          const response = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openAIApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'text-embedding-3-small',
+              input: q,
+            }),
+          });
 
-        if (!response.ok) {
-          console.warn(`Failed to generate embedding for query: ${q}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.warn(`Failed to generate embedding for query ${index}: ${q}`, errorText);
+            return null;
+          }
+
+          const data = await response.json();
+          return { query: q, embedding: data.data[0].embedding };
+        } catch (error) {
+          console.warn(`Exception generating embedding for query ${index}:`, error);
           return null;
         }
-
-        const data = await response.json();
-        return { query: q, embedding: data.data[0].embedding };
       })
     );
 
     const validEmbeddings = embeddingResponses.filter(Boolean);
+    const embeddingTime = Date.now() - embeddingStart;
+    console.log(`Embedding generation completed in ${embeddingTime}ms for ${validEmbeddings.length}/${allQueries.length} queries`);
     
     if (validEmbeddings.length === 0) {
       return new Response(
-        JSON.stringify({ error: 'Failed to generate embeddings for queries' }),
+        JSON.stringify({ 
+          error: 'Failed to generate embeddings for queries',
+          details: 'All embedding requests failed. Please try again.'
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log('Performing RAG-Fusion search with multiple queries...');
 
-    // Step 3: Execute searches for all query variations in parallel
-    const searchPromises = validEmbeddings.map(async ({ query: q, embedding }) => {
+    // Step 3: Execute searches for all query variations in parallel with timing
+    const searchStart = Date.now();
+    const searchPromises = validEmbeddings.map(async ({ query: q, embedding }, index) => {
       try {
-        // Try hybrid search first
+        // Try hybrid search first (better for law enforcement queries)
         const { data: hybridResults, error: hybridError } = await supabase.rpc('hybrid_search', {
           query_text: q,
           query_embedding: embedding,
@@ -88,7 +161,7 @@ serve(async (req) => {
         });
 
         if (hybridError) {
-          console.warn(`Hybrid search failed for query "${q}", falling back to vector search`);
+          console.warn(`Hybrid search failed for query ${index} "${q}", falling back to vector search`);
           
           // Fallback to vector search
           const { data: vectorResults, error: vectorError } = await supabase.rpc('match_documents', {
@@ -98,7 +171,7 @@ serve(async (req) => {
           });
 
           if (vectorError) {
-            console.warn(`Vector search also failed for query "${q}"`);
+            console.warn(`Vector search also failed for query ${index} "${q}"`);
             return [];
           }
 
@@ -107,18 +180,22 @@ serve(async (req) => {
 
         return hybridResults || [];
       } catch (error) {
-        console.warn(`Search failed for query "${q}":`, error);
+        console.warn(`Search failed for query ${index} "${q}":`, error);
         return [];
       }
     });
 
     const allSearchResults = await Promise.all(searchPromises);
+    const searchTime = Date.now() - searchStart;
+    console.log(`Database search completed in ${searchTime}ms`);
 
     // Step 4: RAG-Fusion - Combine results using Reciprocal Rank Fusion (RRF)
+    const fusionStart = Date.now();
     console.log('Fusing search results with RRF...');
-    const documents = fuseSearchResults(allSearchResults, 50); // k=50 for RRF
+    let documents = fuseSearchResults(allSearchResults, 50); // k=50 for RRF
+    const fusionTime = Date.now() - fusionStart;
     
-    console.log(`RAG-Fusion returned ${documents.length} unique results`);
+    console.log(`RAG-Fusion returned ${documents.length} unique results in ${fusionTime}ms`);
 
     // Fallback if no results from any query
     if (documents.length === 0) {
@@ -126,13 +203,16 @@ serve(async (req) => {
       
       const { data: fallbackDocuments, error: fallbackError } = await supabase
         .from('documents')
-        .select('title, category, content')
+        .select('id, title, category, content')
         .limit(5);
 
       if (fallbackError) {
         console.error('All search methods failed:', fallbackError);
         return new Response(
-          JSON.stringify({ error: 'Database search failed' }),
+          JSON.stringify({ 
+            error: 'Database search failed',
+            details: 'Unable to retrieve legal documents from database'
+          }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -141,8 +221,12 @@ serve(async (req) => {
     }
 
     // If we have many results, apply cross-encoder re-ranking
+    let reRankTime = 0;
     if (documents.length > 5) {
-      documents = await reRankWithCrossEncoder(query, documents, openAIApiKey);
+      const reRankStart = Date.now();
+      documents = await reRankWithCrossEncoder(sanitizedQuery, documents, openAIApiKey);
+      reRankTime = Date.now() - reRankStart;
+      console.log(`Re-ranking completed in ${reRankTime}ms`);
     }
 
     // Take top 5 for context
@@ -153,7 +237,15 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           answer: "I'm sorry, but I don't have enough information in my database to answer your question about Massachusetts criminal law. Please try a different query or check back later as more legal documents are added.",
-          sources: []
+          sources: [],
+          performance: {
+            total_time: Date.now() - startTime,
+            query_expansion_time: queryExpansionTime,
+            embedding_time: embeddingTime,
+            search_time: searchTime,
+            fusion_time: fusionTime,
+            rerank_time: reRankTime
+          }
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -161,7 +253,8 @@ serve(async (req) => {
 
     console.log('Generating answer with GPT-4o...');
 
-    // Generate answer using the retrieved context with enhanced prompting
+    // Generate answer using the retrieved context with enhanced law enforcement prompting
+    const answerStart = Date.now();
     const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -173,23 +266,30 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an expert legal assistant specializing in Massachusetts criminal law. Your responses must be:
+            content: `You are an expert legal assistant specializing in Massachusetts criminal law, specifically designed to assist law enforcement officers. Your responses must be:
 
 1. PRECISION-FOCUSED: Base answers ONLY on the provided legal text sections
 2. VERIFIABLE: Cite specific sections or quotes when making legal statements
 3. STRUCTURED: Present information clearly with proper legal hierarchy understanding
-4. CAUTIOUS: If the context doesn't contain enough information, state this clearly
+4. PRACTICAL: Focus on elements of offenses, procedural requirements, and actionable guidance
+5. CAUTIOUS: If the context doesn't contain enough information, state this clearly
+
+For law enforcement queries, prioritize:
+- Elements of criminal offenses that must be proven
+- Procedural requirements from Rules of Criminal Procedure
+- Jury instruction components for understanding legal standards
+- Specific statutory language and citations (M.G.L. references)
 
 Do not use any outside legal knowledge. Only reference the provided Massachusetts legal documents.`
           },
           {
             role: 'user',
-            content: `Query: ${query}
+            content: `Query: ${sanitizedQuery}
 
 Relevant Massachusetts Legal Documents:
 ${context}
 
-Please provide a comprehensive answer based only on these legal texts. If you quote or reference specific provisions, indicate which document section they come from.`
+Please provide a comprehensive answer based only on these legal texts. If you quote or reference specific provisions, indicate which document section they come from. Focus on practical application for law enforcement.`
           }
         ],
         temperature: 0.1, // Lower temperature for more precise legal responses
@@ -201,13 +301,21 @@ Please provide a comprehensive answer based only on these legal texts. If you qu
       const errorData = await chatResponse.text();
       console.error('OpenAI chat error:', errorData);
       return new Response(
-        JSON.stringify({ error: 'Failed to generate answer' }),
+        JSON.stringify({ 
+          error: 'Failed to generate answer',
+          details: 'Answer generation service is temporarily unavailable'
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const chatData = await chatResponse.json();
     const answer = chatData.choices[0].message.content;
+    const answerTime = Date.now() - answerStart;
+    const totalTime = Date.now() - startTime;
+
+    console.log(`Answer generation completed in ${answerTime}ms`);
+    console.log(`Total request processing time: ${totalTime}ms`);
 
     return new Response(
       JSON.stringify({
@@ -215,10 +323,19 @@ Please provide a comprehensive answer based only on these legal texts. If you qu
         sources: contextDocuments.map((doc: any) => ({
           title: doc.title,
           category: doc.category,
-          relevance_score: doc.rrf_score || doc.similarity || 0
+          relevance_score: doc.rrf_score || doc.cross_encoder_score || doc.similarity || 0
         })),
         search_method: 'rag_fusion' + (documents.length > 5 ? '_with_reranking' : ''),
-        query_variations: queryVariations
+        query_variations: queryVariations,
+        performance: {
+          total_time: totalTime,
+          query_expansion_time: queryExpansionTime,
+          embedding_time: embeddingTime,
+          search_time: searchTime,
+          fusion_time: fusionTime,
+          rerank_time: reRankTime,
+          answer_time: answerTime
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

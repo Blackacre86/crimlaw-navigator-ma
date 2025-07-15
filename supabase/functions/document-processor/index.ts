@@ -9,6 +9,26 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Health check endpoint
+  if (req.method === 'GET') {
+    const healthCheck = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      service: 'document-processor',
+      version: '1.0.0',
+      environment: {
+        openai_configured: !!Deno.env.get('OPENAI_API_KEY'),
+        supabase_configured: !!Deno.env.get('SUPABASE_URL'),
+        llamaparse_configured: !!Deno.env.get('LLAMA_CLOUD_API_KEY'),
+        ocr_configured: !!Deno.env.get('OCR_SPACE_API_KEY')
+      }
+    };
+    
+    return new Response(JSON.stringify(healthCheck), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
   const requestId = Math.random().toString(36).substring(2, 15);
   console.log(`[${requestId}] 🚀 Document processor function invoked at ${new Date().toISOString()}`);
 
