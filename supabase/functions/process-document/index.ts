@@ -59,15 +59,24 @@ serve(async (req) => {
     console.log('🔍 Extracting text from PDF using OCR...');
     const arrayBuffer = await fileData.arrayBuffer();
     
+    // File size validation (max 10MB)
+    const fileSizeBytes = arrayBuffer.byteLength;
+    const fileSizeMB = fileSizeBytes / 1024 / 1024;
+    console.log(`📊 PDF size: ${fileSizeMB.toFixed(2)}MB`);
+    
+    if (fileSizeMB > 10) {
+      throw new Error(`File too large: ${fileSizeMB.toFixed(2)}MB. Maximum allowed size is 10MB.`);
+    }
+    
     // Check if OCR API key is configured
     const ocrApiKey = Deno.env.get('OCR_SPACE_API_KEY');
     if (!ocrApiKey) {
       throw new Error('OCR_SPACE_API_KEY not configured');
     }
     
-    // Convert to base64 for OCR.space API
-    const fileBase64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-    console.log(`📊 PDF size: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
+    // Convert to base64 for OCR.space API using efficient chunked approach
+    console.log('📝 Converting PDF to base64...');
+    const fileBase64 = await arrayBufferToBase64(arrayBuffer);
     
     // Call OCR.space API
     const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
@@ -217,6 +226,21 @@ serve(async (req) => {
     });
   }
 });
+
+// Efficient base64 conversion for large files that avoids stack overflow
+async function arrayBufferToBase64(arrayBuffer) {
+  const uint8Array = new Uint8Array(arrayBuffer);
+  const chunkSize = 8192; // Process in 8KB chunks to avoid stack overflow
+  let base64String = '';
+  
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.slice(i, i + chunkSize);
+    const chunkString = String.fromCharCode(...chunk);
+    base64String += btoa(chunkString);
+  }
+  
+  return base64String;
+}
 
 function chunkLegalText(text, maxSize = 1000) {
   const chunks = [];
