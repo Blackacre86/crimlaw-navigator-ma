@@ -21,8 +21,7 @@ import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import AppLayout from "./pages/app/AppLayout";
 import DashboardPage from "./pages/app/DashboardPage";
 import Profile from "./pages/Profile";
-import Admin from "./pages/Admin";
-import AdminDashboard from "./pages/admin/Dashboard";
+import StreamlinedAdmin from "./pages/StreamlinedAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -64,15 +63,7 @@ const App = () => (
                 path="/admin" 
                 element={
                   <ProtectedRoute adminOnly>
-                    <Admin />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/admin/dashboard" 
-                element={
-                  <ProtectedRoute adminOnly>
-                    <AdminDashboard />
+                    <StreamlinedAdmin />
                   </ProtectedRoute>
                 } 
               />
