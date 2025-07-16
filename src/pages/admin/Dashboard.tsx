@@ -24,6 +24,7 @@ import { BulkDocumentManager } from '@/components/admin/BulkDocumentManager';
 import { SimpleDocumentUploader } from '@/components/admin/SimpleDocumentUploader';
 import { ProcessingJobsManager } from '@/components/admin/ProcessingJobsManager';
 import { useToast } from '@/hooks/use-toast';
+import { EmergencySystemRebuild } from '@/components/admin/EmergencySystemRebuild';
 
 export default function AdminDashboard() {
   const { profile } = useAuth();
@@ -224,6 +225,9 @@ export default function AdminDashboard() {
             userGrowth={analytics.charts.userGrowth}
           />
         ) : null}
+
+        {/* Emergency System Rebuild */}
+        <EmergencySystemRebuild />
 
         {/* Simple Document Upload */}
         <SimpleDocumentUploader />

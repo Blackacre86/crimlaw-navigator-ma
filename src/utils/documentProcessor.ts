@@ -21,9 +21,11 @@ export async function processDocument(documentId: string): Promise<boolean> {
       return true;
     }
     
+    console.log('🎯 Invoking process-document function for:', documentId);
     const { data, error } = await supabase.functions.invoke('process-document', {
       body: { documentId }
     });
+    console.log('📊 Process-document response:', { data, error });
     
     if (error) {
       console.error('❌ Error processing document:', error);
@@ -50,7 +52,7 @@ export async function processDocument(documentId: string): Promise<boolean> {
 }
 
 export async function processAllDocuments(): Promise<{ success: number; failed: number }> {
-  console.log('🔄 Processing all pending documents with LlamaCloud...');
+  console.log('🚀 EMERGENCY REBUILD: Processing all pending documents with OCR + Enhanced Chunking...');
   
   // Get all documents that need processing
   const { data: documents, error } = await supabase
@@ -68,14 +70,15 @@ export async function processAllDocuments(): Promise<{ success: number; failed: 
     return { success: 0, failed: 0 };
   }
   
-  console.log(`📄 Found ${documents.length} documents to process with enhanced legal chunking`);
+  console.log(`📄 EMERGENCY REBUILD: Found ${documents.length} documents to process`);
+  console.log('📋 Documents to process:', documents.map(d => d.title));
   
   let success = 0;
   let failed = 0;
   
   // Process documents sequentially to avoid overwhelming the system
   for (const doc of documents) {
-    console.log(`🔄 Processing: ${doc.title}`);
+    console.log(`🔄 [${success + failed + 1}/${documents.length}] Processing: ${doc.title}`);
     const result = await processDocument(doc.id);
     
     if (result) {
@@ -86,9 +89,10 @@ export async function processAllDocuments(): Promise<{ success: number; failed: 
       console.error(`❌ Failed to process: ${doc.title}`);
     }
     
-    // Add small delay between documents
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Add small delay between documents to prevent rate limiting
+    await new Promise(resolve => setTimeout(resolve, 3000));
   }
   
+  console.log(`🎯 EMERGENCY REBUILD COMPLETE: ${success} successful, ${failed} failed`);
   return { success, failed };
 }
