@@ -151,15 +151,29 @@ export function DocumentUploader({ onUploadComplete, maxFiles = 10, batchMode = 
     formData.append('filePath', filePath)
     formData.append('hash', hash)
 
-    const { data, error } = await supabase.functions.invoke('upload-handler', {
+    // First call upload-handler to create document record
+    const { data: uploadData, error: uploadError } = await supabase.functions.invoke('upload-handler', {
       body: formData
     })
 
-    if (error) {
+    if (uploadError) {
       throw new Error('Failed to create document record')
     }
 
-    return data
+    // Then immediately call process-document to start processing
+    const { data: processData, error: processError } = await supabase.functions.invoke('process-document', {
+      body: { documentId: uploadData.document_id }
+    })
+
+    if (processError) {
+      console.error('Process document error:', processError)
+      // Don't throw error here - document is uploaded, processing can be retried
+    }
+
+    return {
+      ...uploadData,
+      processData
+    }
   }
 
   // Process single file

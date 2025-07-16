@@ -97,6 +97,47 @@ export function SystemRepairPanel() {
     }
   };
 
+  const processPendingDocuments = async () => {
+    // Get pending documents
+    const { data: documents, error: fetchError } = await supabase
+      .from('documents')
+      .select('id, title')
+      .eq('ingestion_status', 'pending')
+      .limit(5) // Process max 5 at a time
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch pending documents: ${fetchError.message}`)
+    }
+
+    if (!documents || documents.length === 0) {
+      console.log('No pending documents to process')
+      return 0
+    }
+
+    console.log(`Found ${documents.length} pending documents`)
+
+    // Process each document
+    let processed = 0
+    for (const doc of documents) {
+      try {
+        console.log(`Processing document: ${doc.title}`)
+        const { error: processError } = await supabase.functions.invoke('process-document', {
+          body: { documentId: doc.id }
+        })
+
+        if (processError) {
+          console.error(`Error processing ${doc.title}:`, processError)
+        } else {
+          processed++
+        }
+      } catch (error) {
+        console.error(`Failed to process ${doc.title}:`, error)
+      }
+    }
+
+    return processed
+  }
+
   const startSystemRepair = async () => {
     setIsRepairing(true);
     setRepairProgress(0);
@@ -105,17 +146,22 @@ export function SystemRepairPanel() {
     try {
       // Step 1: Reset stuck documents
       setRepairStatus('Resetting stuck documents...');
-      setRepairProgress(25);
+      setRepairProgress(20);
       await resetStuckDocuments();
 
       // Step 2: Clean up failed jobs
       setRepairStatus('Cleaning up failed processing jobs...');
-      setRepairProgress(50);
+      setRepairProgress(40);
       await supabase.rpc('cleanup_failed_processing_jobs');
 
-      // Step 3: Check system status
+      // Step 3: Process pending documents
+      setRepairStatus('Processing pending documents...');
+      setRepairProgress(60);
+      const processed = await processPendingDocuments();
+
+      // Step 4: Check system status
       setRepairStatus('Checking system status...');
-      setRepairProgress(75);
+      setRepairProgress(80);
       await checkSystemStatus();
 
       setRepairProgress(100);
@@ -123,7 +169,7 @@ export function SystemRepairPanel() {
 
       toast({
         title: "System Repair Completed",
-        description: "System has been cleaned up and reset",
+        description: `System cleaned up and ${processed} documents processed`,
       });
 
     } catch (error) {
@@ -168,6 +214,14 @@ export function SystemRepairPanel() {
             >
               <AlertCircle className="h-4 w-4 mr-2" />
               Reset Stuck Docs
+            </Button>
+            <Button
+              onClick={processPendingDocuments}
+              variant="outline"
+              disabled={isRepairing}
+            >
+              <PlayCircle className="h-4 w-4 mr-2" />
+              Process Pending
             </Button>
             <Button
               onClick={startSystemRepair}
