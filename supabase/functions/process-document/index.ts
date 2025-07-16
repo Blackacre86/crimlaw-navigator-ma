@@ -11,6 +11,9 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const startTime = Date.now();
+  let processingJobId = null;
+  
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -24,6 +27,27 @@ serve(async (req) => {
     const { documentId } = await req.json();
 
     console.log('📄 Processing document:', documentId);
+
+    // Create processing job record for tracking
+    const { data: processingJob, error: jobError } = await supabase
+      .from('processing_jobs')
+      .insert({
+        document_id: documentId,
+        document_name: documentId,
+        original_name: documentId,
+        status: 'processing',
+        started_at: new Date().toISOString(),
+        processing_method: 'ocr_space_enhanced'
+      })
+      .select()
+      .single();
+
+    if (jobError) {
+      console.error('Failed to create processing job:', jobError);
+    } else {
+      processingJobId = processingJob.id;
+      console.log('Created processing job:', processingJobId);
+    }
 
     // Update status to processing
     await supabase
@@ -57,6 +81,7 @@ serve(async (req) => {
 
     // Extract text using OCR.space API (Deno-compatible)
     console.log('🔍 Extracting text from PDF using OCR...');
+    const ocrStartTime = Date.now();
     const arrayBuffer = await fileData.arrayBuffer();
     
     // File size validation (max 10MB)
@@ -65,6 +90,7 @@ serve(async (req) => {
     console.log(`📊 PDF size: ${fileSizeMB.toFixed(2)}MB`);
     
     if (fileSizeMB > 10) {
+      await logError(supabase, processingJobId, 'FILE_TOO_LARGE', `File size ${fileSizeMB.toFixed(2)}MB exceeds 10MB limit`);
       throw new Error(`File too large: ${fileSizeMB.toFixed(2)}MB. Maximum allowed size is 10MB.`);
     }
     
@@ -95,21 +121,29 @@ serve(async (req) => {
     });
 
     if (!ocrResponse.ok) {
-      throw new Error(`OCR API error: ${ocrResponse.status} - ${await ocrResponse.text()}`);
+      const errorText = await ocrResponse.text();
+      await logError(supabase, processingJobId, 'OCR_API_ERROR', `OCR API error: ${ocrResponse.status} - ${errorText}`);
+      throw new Error(`OCR API error: ${ocrResponse.status} - ${errorText}`);
     }
 
     const ocrResult = await ocrResponse.json();
+    const ocrTime = Date.now() - ocrStartTime;
     
     if (ocrResult.OCRExitCode !== 1) {
+      await logError(supabase, processingJobId, 'OCR_PROCESSING_FAILED', ocrResult.ErrorMessage || 'Unknown OCR error');
       throw new Error(`OCR failed: ${ocrResult.ErrorMessage || 'Unknown OCR error'}`);
     }
 
     const textContent = ocrResult.ParsedResults?.[0]?.ParsedText;
     if (!textContent || textContent.trim().length === 0) {
+      await logError(supabase, processingJobId, 'NO_TEXT_EXTRACTED', 'PDF appears to be empty or contains no extractable text');
       throw new Error('No text extracted from PDF');
     }
     
-    console.log(`✅ Extracted ${textContent.length} characters via OCR`);
+    console.log(`✅ Extracted ${textContent.length} characters via OCR in ${ocrTime}ms`);
+
+    // Log performance metrics
+    await logMetric(supabase, processingJobId, 'ocr_processing_time_ms', ocrTime);
 
     // Store extracted content
     await supabase
@@ -125,12 +159,29 @@ serve(async (req) => {
 
     // Chunk the text with legal optimization
     console.log('🔪 Chunking text...');
+    const chunkStartTime = Date.now();
     const chunks = chunkLegalText(textContent);
-    console.log(`📊 Created ${chunks.length} chunks`);
+    const chunkTime = Date.now() - chunkStartTime;
+    console.log(`📊 Created ${chunks.length} chunks in ${chunkTime}ms`);
+
+    // Update processing job with chunk info
+    if (processingJobId) {
+      await supabase
+        .from('processing_jobs')
+        .update({ 
+          total_chunks: chunks.length,
+          chunks_processed: 0,
+          chunk_ms: chunkTime
+        })
+        .eq('id', processingJobId);
+    }
 
     // Process chunks in small batches
     const processedChunks = [];
     const batchSize = 5;
+    const embedStartTime = Date.now();
+    let totalTokens = 0;
+    let totalCost = 0;
 
     for (let i = 0; i < chunks.length; i += batchSize) {
       const batch = chunks.slice(i, i + batchSize);
@@ -138,7 +189,9 @@ serve(async (req) => {
 
       const batchPromises = batch.map(async (chunk, batchIndex) => {
         const chunkIndex = i + batchIndex;
-        const embedding = await generateEmbedding(chunk.content, openaiApiKey);
+        const { embedding, tokensUsed, cost } = await generateEmbedding(chunk.content, openaiApiKey);
+        totalTokens += tokensUsed;
+        totalCost += cost;
         
         return {
           document_id: documentId,
@@ -147,7 +200,8 @@ serve(async (req) => {
           metadata: {
             ...chunk.metadata,
             chunk_index: chunkIndex,
-            document_title: document.title || document.filename
+            document_title: document.title || document.filename,
+            tokens_used: tokensUsed
           },
           chunk_index: chunkIndex
         };
@@ -155,21 +209,42 @@ serve(async (req) => {
 
       const batchResults = await Promise.all(batchPromises);
       processedChunks.push(...batchResults);
+
+      // Update progress
+      if (processingJobId) {
+        await supabase
+          .from('processing_jobs')
+          .update({ chunks_processed: i + batch.length })
+          .eq('id', processingJobId);
+      }
       
-      // Small delay between batches
+      // Small delay between batches to avoid rate limits
       if (i + batchSize < chunks.length) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
+    const embedTime = Date.now() - embedStartTime;
+    console.log(`🎯 Generated ${chunks.length} embeddings in ${embedTime}ms, used ${totalTokens} tokens, cost: $${totalCost.toFixed(4)}`);
+
+    // Log embedding metrics
+    await logMetric(supabase, processingJobId, 'embedding_processing_time_ms', embedTime);
+    await logMetric(supabase, processingJobId, 'total_tokens_used', totalTokens);
+    await logMetric(supabase, processingJobId, 'estimated_cost_usd', totalCost);
+
     // Insert all chunks
+    const insertStartTime = Date.now();
     const { error: insertError } = await supabase
       .from('chunks')
       .insert(processedChunks);
 
     if (insertError) {
+      await logError(supabase, processingJobId, 'CHUNK_INSERT_FAILED', `Failed to insert chunks: ${insertError.message}`);
       throw new Error(`Failed to insert chunks: ${insertError.message}`);
     }
+
+    const insertTime = Date.now() - insertStartTime;
+    const totalTime = Date.now() - startTime;
 
     // Update document status to completed
     await supabase
@@ -183,18 +258,49 @@ serve(async (req) => {
       })
       .eq('id', documentId);
 
-    console.log('✅ Document processed successfully');
+    // Update processing job to completed
+    if (processingJobId) {
+      await supabase
+        .from('processing_jobs')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          chunks_processed: processedChunks.length,
+          total_chunks: processedChunks.length,
+          embed_ms: embedTime,
+          pginsert_ms: insertTime,
+          total_ms: totalTime,
+          token_count: totalTokens,
+          cost_estimate: totalCost,
+          chunk_size_avg: Math.round(textContent.length / chunks.length)
+        })
+        .eq('id', processingJobId);
+    }
+
+    console.log(`✅ Document processed successfully in ${totalTime}ms`);
+
+    // Log final metrics
+    await logMetric(supabase, processingJobId, 'total_processing_time_ms', totalTime);
+    await logMetric(supabase, processingJobId, 'database_insert_time_ms', insertTime);
 
     return new Response(JSON.stringify({
       success: true,
       documentId,
-      chunksCreated: processedChunks.length
+      chunksCreated: processedChunks.length,
+      processingTime: totalTime,
+      tokensUsed: totalTokens,
+      estimatedCost: totalCost
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
+    const totalTime = Date.now() - startTime;
     console.error('❌ Processing error:', error);
+
+    // Categorize error type
+    const errorType = categorizeError(error.message);
+    await logError(supabase, processingJobId, errorType, error.message);
 
     // Update status to failed
     try {
@@ -204,6 +310,8 @@ serve(async (req) => {
         const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
         if (supabaseUrl && supabaseServiceKey) {
           const supabase = createClient(supabaseUrl, supabaseServiceKey);
+          
+          // Update document
           await supabase
             .from('documents')
             .update({ 
@@ -212,6 +320,19 @@ serve(async (req) => {
               updated_at: new Date().toISOString()
             })
             .eq('id', documentId);
+
+          // Update processing job
+          if (processingJobId) {
+            await supabase
+              .from('processing_jobs')
+              .update({
+                status: 'failed',
+                error_message: error.message,
+                completed_at: new Date().toISOString(),
+                total_ms: totalTime
+              })
+              .eq('id', processingJobId);
+          }
         }
       }
     } catch (e) {
@@ -219,7 +340,9 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({
-      error: error.message
+      error: error.message,
+      errorType,
+      processingTime: totalTime
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -364,5 +487,82 @@ async function generateEmbedding(text, apiKey) {
   }
 
   const data = await response.json();
-  return data.data[0].embedding;
+  
+  // Calculate tokens and cost
+  const tokensUsed = data.usage.total_tokens;
+  const cost = tokensUsed * 0.00002; // text-embedding-3-small is $0.00002 per 1k tokens
+  
+  return {
+    embedding: data.data[0].embedding,
+    tokensUsed,
+    cost
+  };
+}
+
+// Error categorization function
+function categorizeError(errorMessage) {
+  const message = errorMessage.toLowerCase();
+  
+  if (message.includes('file too large') || message.includes('size')) {
+    return 'FILE_SIZE_ERROR';
+  }
+  if (message.includes('ocr') || message.includes('parse')) {
+    return 'OCR_ERROR';
+  }
+  if (message.includes('openai') || message.includes('embedding')) {
+    return 'EMBEDDING_ERROR';
+  }
+  if (message.includes('database') || message.includes('insert')) {
+    return 'DATABASE_ERROR';
+  }
+  if (message.includes('download') || message.includes('storage')) {
+    return 'STORAGE_ERROR';
+  }
+  if (message.includes('timeout') || message.includes('time')) {
+    return 'TIMEOUT_ERROR';
+  }
+  
+  return 'UNKNOWN_ERROR';
+}
+
+// Error logging function
+async function logError(supabase, processingJobId, errorType, errorMessage) {
+  if (!supabase || !processingJobId) return;
+  
+  try {
+    await supabase
+      .from('processing_metrics')
+      .insert({
+        processing_job_id: processingJobId,
+        metric_type: 'error',
+        metric_value: 1,
+        metadata: {
+          error_type: errorType,
+          error_message: errorMessage,
+          timestamp: new Date().toISOString()
+        }
+      });
+  } catch (e) {
+    console.error('Failed to log error:', e);
+  }
+}
+
+// Metric logging function
+async function logMetric(supabase, processingJobId, metricType, value) {
+  if (!supabase || !processingJobId) return;
+  
+  try {
+    await supabase
+      .from('processing_metrics')
+      .insert({
+        processing_job_id: processingJobId,
+        metric_type: metricType,
+        metric_value: value,
+        metadata: {
+          timestamp: new Date().toISOString()
+        }
+      });
+  } catch (e) {
+    console.error('Failed to log metric:', e);
+  }
 }

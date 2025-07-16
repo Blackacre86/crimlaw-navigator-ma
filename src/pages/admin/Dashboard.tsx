@@ -22,6 +22,7 @@ import { SystemHealth } from '@/components/admin/SystemHealth';
 import { RecentActivity } from '@/components/admin/RecentActivity';
 import { BulkDocumentManager } from '@/components/admin/BulkDocumentManager';
 import { SimpleDocumentUploader } from '@/components/admin/SimpleDocumentUploader';
+import { ProcessingJobsManager } from '@/components/admin/ProcessingJobsManager';
 import { useToast } from '@/hooks/use-toast';
 
 export default function AdminDashboard() {
@@ -226,6 +227,9 @@ export default function AdminDashboard() {
 
         {/* Simple Document Upload */}
         <SimpleDocumentUploader />
+
+        {/* Processing Jobs Manager */}
+        <ProcessingJobsManager />
         
         {/* Simple Document Management */}
         <BulkDocumentManager />
