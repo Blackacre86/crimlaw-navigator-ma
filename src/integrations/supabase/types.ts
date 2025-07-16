@@ -427,6 +427,10 @@ export type Database = {
           job_data: Json
         }[]
       }
+      cleanup_all_failed_jobs: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       cleanup_failed_processing_jobs: {
         Args: Record<PropertyKey, never>
         Returns: undefined

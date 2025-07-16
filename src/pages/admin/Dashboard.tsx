@@ -21,6 +21,7 @@ import { AnalyticsCharts } from '@/components/admin/AnalyticsCharts';
 import { SystemHealth } from '@/components/admin/SystemHealth';
 import { RecentActivity } from '@/components/admin/RecentActivity';
 import { BulkDocumentManager } from '@/components/admin/BulkDocumentManager';
+import { SimpleDocumentUploader } from '@/components/admin/SimpleDocumentUploader';
 import { useToast } from '@/hooks/use-toast';
 
 export default function AdminDashboard() {
@@ -223,7 +224,10 @@ export default function AdminDashboard() {
           />
         ) : null}
 
-        {/* Bulk Document Management */}
+        {/* Simple Document Upload */}
+        <SimpleDocumentUploader />
+        
+        {/* Simple Document Management */}
         <BulkDocumentManager />
 
         {/* Bottom Section */}

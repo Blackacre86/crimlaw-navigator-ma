@@ -218,50 +218,110 @@ serve(async (req) => {
   }
 });
 
-function chunkLegalText(text, maxSize = 1500) {
+function chunkLegalText(text, maxSize = 1000) {
   const chunks = [];
   
-  // Split by common legal document patterns
-  const sections = text.split(/(?=(?:^|\n)(?:Rule|RULE|Section|SECTION|Chapter|CHAPTER|Article|ARTICLE|Part|PART|§)\s*\d+)/);
+  // Simple paragraph-based chunking with strict token limits
+  const paragraphs = text.split(/\n\s*\n/);
+  let currentChunk = '';
   
-  for (const section of sections) {
-    if (!section.trim()) continue;
+  for (const para of paragraphs) {
+    const trimmedPara = para.trim();
+    if (!trimmedPara) continue;
     
-    if (section.length <= maxSize) {
+    // If adding this paragraph would exceed maxSize, finalize current chunk
+    if (currentChunk.length + trimmedPara.length + 2 > maxSize && currentChunk) {
       chunks.push({
-        content: section.trim(),
-        metadata: { type: 'legal_section' }
+        content: currentChunk.trim(),
+        metadata: { type: 'paragraph', index: chunks.length }
       });
-    } else {
-      // Split large sections by paragraphs
-      const paragraphs = section.split(/\n\s*\n/);
-      let currentChunk = '';
+      currentChunk = '';
+    }
+    
+    // If single paragraph is too large, split it by sentences
+    if (trimmedPara.length > maxSize) {
+      const sentences = trimmedPara.split(/[.!?]+\s+/);
+      let sentenceChunk = '';
       
-      for (const para of paragraphs) {
-        if (currentChunk.length + para.length > maxSize && currentChunk) {
+      for (const sentence of sentences) {
+        if (sentenceChunk.length + sentence.length + 2 > maxSize && sentenceChunk) {
           chunks.push({
-            content: currentChunk.trim(),
-            metadata: { type: 'legal_paragraph' }
+            content: sentenceChunk.trim(),
+            metadata: { type: 'sentence', index: chunks.length }
           });
-          currentChunk = para;
+          sentenceChunk = sentence;
         } else {
-          currentChunk += (currentChunk ? '\n\n' : '') + para;
+          sentenceChunk += (sentenceChunk ? '. ' : '') + sentence;
         }
       }
       
-      if (currentChunk.trim()) {
-        chunks.push({
-          content: currentChunk.trim(),
-          metadata: { type: 'legal_paragraph' }
-        });
+      if (sentenceChunk) {
+        if (currentChunk && currentChunk.length + sentenceChunk.length + 2 <= maxSize) {
+          currentChunk += '\n\n' + sentenceChunk;
+        } else {
+          if (currentChunk) {
+            chunks.push({
+              content: currentChunk.trim(),
+              metadata: { type: 'paragraph', index: chunks.length }
+            });
+          }
+          currentChunk = sentenceChunk;
+        }
       }
+    } else {
+      currentChunk += (currentChunk ? '\n\n' : '') + trimmedPara;
     }
   }
   
-  return chunks;
+  // Add final chunk
+  if (currentChunk) {
+    chunks.push({
+      content: currentChunk.trim(),
+      metadata: { type: 'paragraph', index: chunks.length }
+    });
+  }
+  
+  // Ensure no chunk exceeds token limit for embeddings (roughly 6000 characters = 1500 tokens)
+  const finalChunks = [];
+  for (const chunk of chunks) {
+    if (chunk.content.length > 6000) {
+      // Force split very large chunks
+      const words = chunk.content.split(' ');
+      let wordChunk = '';
+      
+      for (const word of words) {
+        if (wordChunk.length + word.length + 1 > 6000 && wordChunk) {
+          finalChunks.push({
+            content: wordChunk.trim(),
+            metadata: { type: 'forced_split', index: finalChunks.length }
+          });
+          wordChunk = word;
+        } else {
+          wordChunk += (wordChunk ? ' ' : '') + word;
+        }
+      }
+      
+      if (wordChunk) {
+        finalChunks.push({
+          content: wordChunk.trim(),
+          metadata: { type: 'forced_split', index: finalChunks.length }
+        });
+      }
+    } else {
+      finalChunks.push({
+        ...chunk,
+        metadata: { ...chunk.metadata, index: finalChunks.length }
+      });
+    }
+  }
+  
+  return finalChunks;
 }
 
 async function generateEmbedding(text, apiKey) {
+  // Ensure text is within safe token limits (roughly 7000 chars = 1750 tokens, well under 8192 limit)
+  const safeText = text.slice(0, 7000);
+  
   const response = await fetch('https://api.openai.com/v1/embeddings', {
     method: 'POST',
     headers: {
@@ -270,7 +330,7 @@ async function generateEmbedding(text, apiKey) {
     },
     body: JSON.stringify({
       model: 'text-embedding-3-small',
-      input: text.slice(0, 8191) // Stay within token limit
+      input: safeText
     }),
   });
 

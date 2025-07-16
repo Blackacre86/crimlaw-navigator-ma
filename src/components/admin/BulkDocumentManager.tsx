@@ -2,75 +2,48 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Trash2, RefreshCw, CheckCircle } from 'lucide-react';
+import { AlertTriangle, Trash2, RefreshCw, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-interface CleanupStats {
-  documentsToDelete: number;
-  jobsToDelete: number;
-  duplicatesToRemove: number;
-  stuckDocuments: number;
+interface DocumentStats {
+  totalDocuments: number;
+  completedDocuments: number;
+  failedDocuments: number;
 }
 
 export function BulkDocumentManager() {
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState<CleanupStats | null>(null);
+  const [stats, setStats] = useState<DocumentStats | null>(null);
   const { toast } = useToast();
 
-  const checkCleanupNeeded = async () => {
+  const checkDocumentStats = async () => {
     setLoading(true);
     try {
-      // Check for failed documents
-      const { data: failedDocs } = await supabase
-        .from('documents')
-        .select('id')
-        .eq('ingestion_status', 'failed');
-
-      // Check for orphaned processing jobs
-      const { data: orphanedJobs } = await supabase
-        .from('processing_jobs')
-        .select('id')
-        .is('document_id', null);
-
-      // Check for stuck processing documents
-      const { data: stuckDocs } = await supabase
-        .from('documents')
-        .select('id')
-        .eq('ingestion_status', 'processing')
-        .lt('processing_started_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
-
-      // Check for duplicate documents by title
+      // Get simple document counts
       const { data: allDocs } = await supabase
         .from('documents')
-        .select('id, title, content_hash');
+        .select('id, ingestion_status');
 
-      const titleGroups: { [key: string]: any[] } = {};
-      allDocs?.forEach(doc => {
-        if (!titleGroups[doc.title]) titleGroups[doc.title] = [];
-        titleGroups[doc.title].push(doc);
-      });
-
-      const duplicatesToRemove = Object.values(titleGroups)
-        .filter(group => group.length > 1)
-        .reduce((sum, group) => sum + (group.length - 1), 0);
+      const totalDocuments = allDocs?.length || 0;
+      const completedDocuments = allDocs?.filter(doc => doc.ingestion_status === 'completed').length || 0;
+      const failedDocuments = allDocs?.filter(doc => doc.ingestion_status === 'failed').length || 0;
 
       setStats({
-        documentsToDelete: (failedDocs?.length || 0),
-        jobsToDelete: (orphanedJobs?.length || 0),
-        duplicatesToRemove,
-        stuckDocuments: (stuckDocs?.length || 0)
+        totalDocuments,
+        completedDocuments,
+        failedDocuments
       });
 
       toast({
-        title: "Cleanup Analysis Complete",
-        description: `Found ${(failedDocs?.length || 0) + duplicatesToRemove + (stuckDocs?.length || 0)} documents that need attention.`
+        title: "Document Analysis Complete",
+        description: `${totalDocuments} total documents, ${completedDocuments} completed, ${failedDocuments} failed.`
       });
     } catch (error) {
-      console.error('Error checking cleanup needs:', error);
+      console.error('Error checking document stats:', error);
       toast({
         title: "Error",
-        description: "Failed to analyze cleanup requirements",
+        description: "Failed to analyze documents",
         variant: "destructive"
       });
     } finally {
@@ -78,29 +51,19 @@ export function BulkDocumentManager() {
     }
   };
 
-  const performCleanup = async () => {
+  const cleanupFailedJobs = async () => {
     setLoading(true);
     try {
-      // Run the cleanup function
-      const { error } = await supabase.rpc('cleanup_failed_processing_jobs');
+      // Use the new simplified cleanup function
+      const { error } = await supabase.rpc('cleanup_all_failed_jobs');
       
       if (error) {
         throw error;
       }
 
-      // Delete failed documents
-      const { error: deleteError } = await supabase
-        .from('documents')
-        .delete()
-        .eq('ingestion_status', 'failed');
-
-      if (deleteError) {
-        throw deleteError;
-      }
-
       toast({
         title: "Cleanup Complete",
-        description: "Successfully cleaned up failed documents and jobs.",
+        description: "All failed jobs have been cleaned up.",
       });
 
       // Reset stats
@@ -117,59 +80,34 @@ export function BulkDocumentManager() {
     }
   };
 
-  const resetAllDocuments = async () => {
+  const deleteAllFailedDocuments = async () => {
+    if (!confirm('Are you sure you want to delete all failed documents? This cannot be undone.')) {
+      return;
+    }
+
     setLoading(true);
     try {
-      // Reset all documents to pending status
+      // Delete failed documents
       const { error } = await supabase
         .from('documents')
-        .update({
-          ingestion_status: 'pending',
-          chunked: false,
-          processing_started_at: null,
-          processing_completed_at: null,
-          error_message: null
-        })
-        .neq('ingestion_status', 'completed');
+        .delete()
+        .eq('ingestion_status', 'failed');
 
       if (error) {
         throw error;
       }
 
       toast({
-        title: "Documents Reset",
-        description: "All non-completed documents have been reset to pending status.",
+        title: "Failed Documents Deleted",
+        description: "All failed documents have been removed.",
       });
 
       setStats(null);
     } catch (error) {
-      console.error('Error resetting documents:', error);
+      console.error('Error deleting documents:', error);
       toast({
-        title: "Reset Failed",
-        description: "Failed to reset documents. Please try again.",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const forceReprocessAll = async () => {
-    setLoading(true);
-    try {
-      // Import the document processor utility
-      const { processAllDocuments } = await import('@/utils/documentProcessor');
-      const result = await processAllDocuments();
-
-      toast({
-        title: "Reprocessing Complete",
-        description: `Successfully processed ${result.success} documents. ${result.failed} failed.`,
-      });
-    } catch (error) {
-      console.error('Error reprocessing documents:', error);
-      toast({
-        title: "Reprocessing Failed",
-        description: "Failed to reprocess documents. Please try again.",
+        title: "Delete Failed",
+        description: "Failed to delete documents. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -182,76 +120,62 @@ export function BulkDocumentManager() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Trash2 className="h-5 w-5" />
-            Bulk Document Management
+            <Upload className="h-5 w-5" />
+            Simple Document Management
           </CardTitle>
           <CardDescription>
-            Clean up failed documents, duplicates, and reset processing states
+            Upload documents and forget about them - processing happens automatically in the background
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-4">
             <Button
-              onClick={checkCleanupNeeded}
+              onClick={checkDocumentStats}
               disabled={loading}
               variant="outline"
             >
               {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
-              Analyze Cleanup Needs
+              Check Document Status
             </Button>
           </div>
 
           {stats && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+            <div className="grid grid-cols-3 gap-4 mt-4">
+              <div className="text-center p-4 bg-primary/10 rounded-lg">
+                <div className="text-2xl font-bold text-primary">{stats.totalDocuments}</div>
+                <div className="text-sm text-muted-foreground">Total Documents</div>
+              </div>
+              <div className="text-center p-4 bg-green-500/10 rounded-lg">
+                <div className="text-2xl font-bold text-green-600">{stats.completedDocuments}</div>
+                <div className="text-sm text-muted-foreground">Ready to Search</div>
+              </div>
               <div className="text-center p-4 bg-destructive/10 rounded-lg">
-                <div className="text-2xl font-bold text-destructive">{stats.documentsToDelete}</div>
-                <div className="text-sm text-muted-foreground">Failed Documents</div>
-              </div>
-              <div className="text-center p-4 bg-warning/10 rounded-lg">
-                <div className="text-2xl font-bold text-warning">{stats.jobsToDelete}</div>
-                <div className="text-sm text-muted-foreground">Orphaned Jobs</div>
-              </div>
-              <div className="text-center p-4 bg-info/10 rounded-lg">
-                <div className="text-2xl font-bold text-info">{stats.duplicatesToRemove}</div>
-                <div className="text-sm text-muted-foreground">Duplicates</div>
-              </div>
-              <div className="text-center p-4 bg-warning/10 rounded-lg">
-                <div className="text-2xl font-bold text-warning">{stats.stuckDocuments}</div>
-                <div className="text-sm text-muted-foreground">Stuck Processing</div>
+                <div className="text-2xl font-bold text-destructive">{stats.failedDocuments}</div>
+                <div className="text-sm text-muted-foreground">Failed</div>
               </div>
             </div>
           )}
 
-          {stats && (
+          {stats && stats.failedDocuments > 0 && (
             <div className="flex flex-wrap gap-2 mt-4">
               <Button
-                onClick={performCleanup}
+                onClick={cleanupFailedJobs}
+                disabled={loading}
+                variant="outline"
+                size="sm"
+              >
+                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                Clean Up Failed Processing
+              </Button>
+              
+              <Button
+                onClick={deleteAllFailedDocuments}
                 disabled={loading}
                 variant="destructive"
                 size="sm"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                Clean Up Failed Items
-              </Button>
-              
-              <Button
-                onClick={resetAllDocuments}
-                disabled={loading}
-                variant="outline"
-                size="sm"
-              >
-                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Reset All to Pending
-              </Button>
-              
-              <Button
-                onClick={forceReprocessAll}
-                disabled={loading}
-                variant="default"
-                size="sm"
-              >
-                {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                Force Reprocess All
+                Delete All Failed Documents
               </Button>
             </div>
           )}
