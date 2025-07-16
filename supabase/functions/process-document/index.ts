@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import pdfParse from 'https://esm.sh/pdf-parse@1.1.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -56,21 +55,52 @@ serve(async (req) => {
       throw new Error(`Failed to download PDF: ${downloadError?.message}`);
     }
 
-    // Extract text using simple pdf-parse
-    console.log('📑 Extracting text from PDF...');
+    // Extract text using OCR.space API (Deno-compatible)
+    console.log('🔍 Extracting text from PDF using OCR...');
     const arrayBuffer = await fileData.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
     
-    console.log(`📊 PDF size: ${(buffer.length / 1024 / 1024).toFixed(2)}MB`);
-    
-    const pdfData = await pdfParse(buffer);
-    const textContent = pdfData.text;
-    
-    if (!textContent || textContent.trim().length === 0) {
-      throw new Error('No text content extracted from PDF');
+    // Check if OCR API key is configured
+    const ocrApiKey = Deno.env.get('OCR_SPACE_API_KEY');
+    if (!ocrApiKey) {
+      throw new Error('OCR_SPACE_API_KEY not configured');
     }
     
-    console.log(`✅ Extracted ${textContent.length} characters from ${pdfData.numpages} pages`);
+    // Convert to base64 for OCR.space API
+    const fileBase64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    console.log(`📊 PDF size: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB`);
+    
+    // Call OCR.space API
+    const ocrResponse = await fetch('https://api.ocr.space/parse/image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        'apikey': ocrApiKey,
+        'base64Image': `data:application/pdf;base64,${fileBase64}`,
+        'filetype': 'PDF',
+        'OCREngine': '2',
+        'isCreateSearchablePdf': 'false',
+        'isSearchablePdfHideTextLayer': 'false'
+      }),
+    });
+
+    if (!ocrResponse.ok) {
+      throw new Error(`OCR API error: ${ocrResponse.status} - ${await ocrResponse.text()}`);
+    }
+
+    const ocrResult = await ocrResponse.json();
+    
+    if (ocrResult.OCRExitCode !== 1) {
+      throw new Error(`OCR failed: ${ocrResult.ErrorMessage || 'Unknown OCR error'}`);
+    }
+
+    const textContent = ocrResult.ParsedResults?.[0]?.ParsedText;
+    if (!textContent || textContent.trim().length === 0) {
+      throw new Error('No text extracted from PDF');
+    }
+    
+    console.log(`✅ Extracted ${textContent.length} characters via OCR`);
 
     // Store extracted content
     await supabase

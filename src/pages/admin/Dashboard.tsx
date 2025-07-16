@@ -20,6 +20,7 @@ import { useAdminAnalytics } from '@/hooks/useAdminAnalytics';
 import { AnalyticsCharts } from '@/components/admin/AnalyticsCharts';
 import { SystemHealth } from '@/components/admin/SystemHealth';
 import { RecentActivity } from '@/components/admin/RecentActivity';
+import { BulkDocumentManager } from '@/components/admin/BulkDocumentManager';
 import { useToast } from '@/hooks/use-toast';
 
 export default function AdminDashboard() {
@@ -221,6 +222,9 @@ export default function AdminDashboard() {
             userGrowth={analytics.charts.userGrowth}
           />
         ) : null}
+
+        {/* Bulk Document Management */}
+        <BulkDocumentManager />
 
         {/* Bottom Section */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

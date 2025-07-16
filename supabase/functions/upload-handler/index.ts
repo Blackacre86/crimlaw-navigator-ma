@@ -82,29 +82,32 @@ serve(async (req) => {
 
     console.log(`Processing file: ${file.name}, hash: ${contentHash}`);
 
-    // Check if document with same hash already exists
-    const { data: existingDoc, error: checkError } = await supabase
-      .from('documents')
-      .select('id, document_title, ingestion_status')
-      .eq('content_hash', contentHash)
-      .single();
+    // Use the new duplicate detection function
+    const { data: duplicateCheck, error: checkError } = await supabase
+      .rpc('check_document_duplicate', {
+        p_content_hash: contentHash,
+        p_title: file.name
+      });
 
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Error checking existing document:', checkError);
-      return new Response(JSON.stringify({ error: 'Database error' }), {
+    if (checkError) {
+      console.error('Error checking duplicate document:', checkError);
+      return new Response(JSON.stringify({ error: 'Duplicate check failed' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    if (existingDoc) {
+    if (duplicateCheck && duplicateCheck.length > 0 && duplicateCheck[0].doc_exists) {
+      const existing = duplicateCheck[0];
+      console.log(`Duplicate document detected: ${existing.document_title} (ID: ${existing.document_id})`);
+      
       return new Response(JSON.stringify({ 
-        message: 'Document already exists',
-        document_id: existingDoc.id,
-        document_title: existingDoc.document_title,
-        ingestion_status: existingDoc.ingestion_status
+        error: 'Document already exists',
+        message: `A document with the same content already exists: "${existing.document_title}"`,
+        existing_document_id: existing.document_id,
+        existing_document_title: existing.document_title
       }), {
-        status: 200,
+        status: 409, // Conflict status
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }

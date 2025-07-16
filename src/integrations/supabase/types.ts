@@ -411,6 +411,14 @@ export type Database = {
         Args: { "": string } | { "": unknown }
         Returns: unknown
       }
+      check_document_duplicate: {
+        Args: { p_content_hash: string; p_title: string }
+        Returns: {
+          doc_exists: boolean
+          document_id: string
+          document_title: string
+        }[]
+      }
       claim_next_job: {
         Args: { p_worker_id: string; p_job_types?: string[] }
         Returns: {
@@ -418,6 +426,10 @@ export type Database = {
           job_type: string
           job_data: Json
         }[]
+      }
+      cleanup_failed_processing_jobs: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       complete_job: {
         Args: { p_job_id: string; p_result?: Json }

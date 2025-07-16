@@ -2,7 +2,24 @@ import { supabase } from '@/integrations/supabase/client';
 
 export async function processDocument(documentId: string): Promise<boolean> {
   try {
-    console.log('🚀 Triggering enhanced document processing for:', documentId);
+    console.log('🚀 Triggering document processing for:', documentId);
+    
+    // First check if document exists and is in correct state
+    const { data: document, error: fetchError } = await supabase
+      .from('documents')
+      .select('id, ingestion_status, title')
+      .eq('id', documentId)
+      .single();
+    
+    if (fetchError || !document) {
+      console.error('❌ Document not found:', fetchError);
+      return false;
+    }
+    
+    if (document.ingestion_status === 'completed') {
+      console.log('✅ Document already processed:', document.title);
+      return true;
+    }
     
     const { data, error } = await supabase.functions.invoke('process-document', {
       body: { documentId }
@@ -10,10 +27,21 @@ export async function processDocument(documentId: string): Promise<boolean> {
     
     if (error) {
       console.error('❌ Error processing document:', error);
+      
+      // Update document status to failed
+      await supabase
+        .from('documents')
+        .update({
+          ingestion_status: 'failed',
+          error_message: error.message,
+          processing_completed_at: new Date().toISOString()
+        })
+        .eq('id', documentId);
+      
       return false;
     }
     
-    console.log('✅ Document processing triggered successfully:', data);
+    console.log('✅ Document processing completed:', data);
     return true;
   } catch (error) {
     console.error('❌ Unexpected error:', error);
