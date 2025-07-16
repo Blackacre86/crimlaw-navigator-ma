@@ -67,42 +67,63 @@ export function SystemRepairPanel() {
     }
   };
 
+  const resetStuckDocuments = async () => {
+    try {
+      const { error } = await supabase
+        .from('documents')
+        .update({ 
+          ingestion_status: 'pending',
+          processing_started_at: null,
+          error_message: null,
+          chunked: false
+        })
+        .eq('ingestion_status', 'processing');
+
+      if (error) throw error;
+
+      toast({
+        title: "Documents Reset",
+        description: "Stuck documents have been reset to pending status",
+      });
+      
+      await checkSystemStatus();
+    } catch (error) {
+      console.error('Failed to reset documents:', error);
+      toast({
+        title: "Reset Failed",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive"
+      });
+    }
+  };
+
   const startSystemRepair = async () => {
     setIsRepairing(true);
     setRepairProgress(0);
     setRepairStatus('Starting system repair...');
 
     try {
-      // Step 1: Check system status
-      setRepairStatus('Checking system status...');
-      setRepairProgress(20);
-      await checkSystemStatus();
+      // Step 1: Reset stuck documents
+      setRepairStatus('Resetting stuck documents...');
+      setRepairProgress(25);
+      await resetStuckDocuments();
 
-      // Step 2: Run cleanup function
+      // Step 2: Clean up failed jobs
       setRepairStatus('Cleaning up failed processing jobs...');
-      setRepairProgress(40);
+      setRepairProgress(50);
       await supabase.rpc('cleanup_failed_processing_jobs');
 
-      // Step 3: Start reprocessing documents
-      setRepairStatus('Starting document reprocessing...');
-      setRepairProgress(60);
-      const { data: reprocessResult, error } = await supabase.rpc('reprocess_all_documents');
-      
-      if (error) {
-        throw error;
-      }
-
-      setRepairProgress(80);
-      setRepairStatus('Finalizing repair...');
-
-      // Step 4: Final status check
+      // Step 3: Check system status
+      setRepairStatus('Checking system status...');
+      setRepairProgress(75);
       await checkSystemStatus();
+
       setRepairProgress(100);
       setRepairStatus('System repair completed!');
 
       toast({
         title: "System Repair Completed",
-        description: `Processed ${reprocessResult?.[0]?.processed_count || 0} documents successfully`,
+        description: "System has been cleaned up and reset",
       });
 
     } catch (error) {
@@ -131,14 +152,22 @@ export function SystemRepairPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={checkSystemStatus}
               variant="outline"
               disabled={isRepairing}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              Check System Status
+              Check Status
+            </Button>
+            <Button
+              onClick={resetStuckDocuments}
+              variant="outline"
+              disabled={isRepairing}
+            >
+              <AlertCircle className="h-4 w-4 mr-2" />
+              Reset Stuck Docs
             </Button>
             <Button
               onClick={startSystemRepair}
@@ -146,7 +175,7 @@ export function SystemRepairPanel() {
               className="bg-primary hover:bg-primary/90"
             >
               <PlayCircle className="h-4 w-4 mr-2" />
-              Start System Repair
+              Full Repair
             </Button>
           </div>
 
@@ -215,14 +244,7 @@ export function SystemRepairPanel() {
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              <strong>System Repair Process:</strong>
-              <ol className="list-decimal list-inside mt-2 space-y-1">
-                <li>Fixes database function type mismatches</li>
-                <li>Resets corrupted "completed" documents with 0 chunks to "pending"</li>
-                <li>Cleans up orphaned processing jobs</li>
-                <li>Reprocesses all pending documents</li>
-                <li>Verifies search functionality</li>
-              </ol>
+              <strong>Repair Tools:</strong> Use "Check Status" to see system health, "Reset Stuck Docs" to fix processing issues, or "Full Repair" to clean up failed jobs and reset the system.
             </AlertDescription>
           </Alert>
         </CardContent>

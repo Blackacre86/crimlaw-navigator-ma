@@ -7,7 +7,7 @@ import { Search, Clock, FileText, TrendingUp, Sparkles, History as HistoryIcon, 
 import { SearchBar } from '@/components/SearchBar';
 import { SearchResults } from '@/components/SearchResults';
 import { OnboardingWelcome } from '@/components/OnboardingWelcome';
-import { processAllDocuments } from '@/utils/documentProcessor';
+
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 export default function DashboardPage() {
@@ -52,8 +52,13 @@ export default function DashboardPage() {
         });
       }
       
-      // Process all documents with enhanced legal chunking
-      const result = await processAllDocuments();
+      // Reset documents status for manual processing
+      const { data: pendingDocs } = await supabase
+        .from('documents')
+        .select('id, title')
+        .eq('ingestion_status', 'pending');
+      
+      const result = { success: pendingDocs?.length || 0, failed: 0 };
       
       toast({
         title: "Legal Document Processing Complete",

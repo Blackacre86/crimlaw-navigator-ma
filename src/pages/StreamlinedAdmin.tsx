@@ -26,7 +26,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useErrorHandling } from '@/hooks/use-error-handling';
 import { ErrorDialog } from '@/components/ui/error-dialog';
 import { useProcessingJobs } from '@/hooks/useProcessingJobs';
-import { EmergencySystemRebuild } from '@/components/admin/EmergencySystemRebuild';
+import { SystemRepairPanel } from '@/components/admin/SystemRepairPanel';
 import { useQuery } from '@tanstack/react-query';
 
 interface BasicStats {
@@ -359,7 +359,7 @@ export default function StreamlinedAdmin() {
           </TabsContent>
 
           <TabsContent value="repair">
-            <EmergencySystemRebuild />
+            <SystemRepairPanel />
           </TabsContent>
         </Tabs>
 
