@@ -544,6 +544,13 @@ export type Database = {
           similarity: number
         }[]
       }
+      reprocess_all_documents: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          processed_count: number
+          failed_count: number
+        }[]
+      }
       sparsevec_out: {
         Args: { "": unknown }
         Returns: unknown

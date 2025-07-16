@@ -24,6 +24,7 @@ import { ProcessingPipeline } from '@/components/ProcessingPipeline';
 import { HistoricalCharts } from '@/components/HistoricalCharts';
 import { TimingCharts } from '@/components/TimingCharts';
 import { useProcessingJobs } from '@/hooks/useProcessingJobs';
+import { SystemRepairPanel } from '@/components/admin/SystemRepairPanel';
 
 export default function Admin() {
   const { profile } = useAuth();
@@ -239,11 +240,12 @@ export default function Admin() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid grid-cols-5 w-full">
+          <TabsList className="grid grid-cols-6 w-full">
             <TabsTrigger value="upload">Upload</TabsTrigger>
             <TabsTrigger value="monitor">Monitor</TabsTrigger>
             <TabsTrigger value="metrics">Metrics</TabsTrigger>
             <TabsTrigger value="errors">Errors</TabsTrigger>
+            <TabsTrigger value="repair">Repair</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
@@ -346,6 +348,10 @@ export default function Admin() {
 
           <TabsContent value="errors" className="mt-6">
             <ErrorHistoryPanel />
+          </TabsContent>
+
+          <TabsContent value="repair" className="mt-6">
+            <SystemRepairPanel />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">
