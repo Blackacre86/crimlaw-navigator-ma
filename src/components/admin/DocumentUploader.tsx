@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { pythonAPI } from '@/lib/python-api'
+import { ProcessingMethodDialog } from './ProcessingMethodDialog'
 
 interface UploadFile {
   file: File
@@ -60,6 +62,9 @@ export function DocumentUploader({ onUploadComplete, maxFiles = 10, batchMode = 
   const [files, setFiles] = useState<UploadFile[]>([])
   const [isBatchMode, setIsBatchMode] = useState(batchMode)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [showProcessingDialog, setShowProcessingDialog] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<UploadFile | null>(null)
+  const [usePythonBackend, setUsePythonBackend] = useState(true)
 
   // Admin access control
   if (profile?.role !== 'admin') {
@@ -176,7 +181,91 @@ export function DocumentUploader({ onUploadComplete, maxFiles = 10, batchMode = 
     }
   }
 
-  // Process single file
+  // Process with Python backend
+  const processWithPythonBackend = async (uploadFile: UploadFile, useLlamaCloud: boolean) => {
+    const updateFile = (updates: Partial<UploadFile>) => {
+      setFiles(prev => prev.map(f => f.id === uploadFile.id ? { ...f, ...updates } : f))
+    }
+
+    try {
+      // Generate document ID
+      const documentId = crypto.randomUUID()
+      updateFile({ documentId, status: 'uploading', progress: 20 })
+
+      // Create document record in Supabase first
+      const { error: createError } = await supabase
+        .from('documents')
+        .insert({
+          id: documentId,
+          title: uploadFile.file.name,
+          category: 'uploaded',
+          ingestion_status: 'pending',
+          created_at: new Date().toISOString(),
+        })
+
+      if (createError) {
+        throw new Error('Failed to create document record')
+      }
+
+      updateFile({ progress: 40 })
+
+      // Upload to Python backend
+      const response = await pythonAPI.processDocument(uploadFile.file, {
+        useLlamaCloud,
+        documentId
+      })
+
+      updateFile({ 
+        status: 'processing',
+        progress: 70,
+        jobId: response.document_id
+      })
+
+      toast({
+        title: "Processing started",
+        description: `${uploadFile.file.name} is being processed with ${useLlamaCloud ? 'LlamaCloud' : 'standard'} extraction`,
+      })
+
+      // Poll for completion in background
+      pythonAPI.waitForProcessing(response.document_id)
+        .then(() => {
+          updateFile({ status: 'completed', progress: 100 })
+          toast({
+            title: "Processing complete",
+            description: `${uploadFile.file.name} has been processed successfully`,
+          })
+        })
+        .catch((error) => {
+          updateFile({ 
+            status: 'error', 
+            error: error.message,
+            progress: 100
+          })
+          toast({
+            title: "Processing failed",
+            description: error.message,
+            variant: "destructive",
+          })
+        })
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Processing failed'
+      updateFile({ 
+        status: 'error', 
+        error: errorMessage,
+        progress: 100
+      })
+      
+      showError({
+        title: 'Processing Error',
+        message: errorMessage,
+        component: 'DocumentUploader',
+        metadata: { fileName: uploadFile.file.name }
+      })
+    }
+  }
+
+  // Process single file (fallback to original method)
   const processFile = async (uploadFile: UploadFile) => {
     const updateFile = (updates: Partial<UploadFile>) => {
       setFiles(prev => prev.map(f => f.id === uploadFile.id ? { ...f, ...updates } : f))
@@ -260,7 +349,14 @@ export function DocumentUploader({ onUploadComplete, maxFiles = 10, batchMode = 
     setFiles(prev => [...prev, ...newFiles])
 
     if (!isBatchMode) {
-      newFiles.forEach(processFile)
+      if (usePythonBackend && newFiles.length === 1) {
+        // Show processing method dialog for Python backend
+        setSelectedFile(newFiles[0])
+        setShowProcessingDialog(true)
+      } else {
+        // Use original processing for multiple files or when Python backend is disabled
+        newFiles.forEach(processFile)
+      }
     }
   }, [files.length, maxFiles, isBatchMode])
 
@@ -274,6 +370,15 @@ export function DocumentUploader({ onUploadComplete, maxFiles = 10, batchMode = 
     disabled: isProcessing
   })
 
+  // Handle processing method selection
+  const handleProcessingMethodSelect = (useLlamaCloud: boolean) => {
+    if (selectedFile) {
+      processWithPythonBackend(selectedFile, useLlamaCloud)
+    }
+    setShowProcessingDialog(false)
+    setSelectedFile(null)
+  }
+
   // Batch upload handler
   const handleBatchUpload = async () => {
     if (!isBatchMode) return
@@ -282,7 +387,11 @@ export function DocumentUploader({ onUploadComplete, maxFiles = 10, batchMode = 
     const pendingFiles = files.filter(f => f.status === 'pending')
     
     for (const file of pendingFiles) {
-      await processFile(file)
+      if (usePythonBackend) {
+        await processWithPythonBackend(file, false) // Default to standard processing for batch
+      } else {
+        await processFile(file)
+      }
     }
     
     setIsProcessing(false)
@@ -342,13 +451,23 @@ export function DocumentUploader({ onUploadComplete, maxFiles = 10, batchMode = 
             <Upload className="h-5 w-5" />
             Document Upload
           </CardTitle>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="batch-mode"
-              checked={isBatchMode}
-              onCheckedChange={setIsBatchMode}
-            />
-            <Label htmlFor="batch-mode">Batch Mode</Label>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="python-backend"
+                checked={usePythonBackend}
+                onCheckedChange={setUsePythonBackend}
+              />
+              <Label htmlFor="python-backend">Python Backend</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="batch-mode"
+                checked={isBatchMode}
+                onCheckedChange={setIsBatchMode}
+              />
+              <Label htmlFor="batch-mode">Batch Mode</Label>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -460,6 +579,14 @@ export function DocumentUploader({ onUploadComplete, maxFiles = 10, batchMode = 
             </div>
           </div>
         )}
+
+        {/* Processing Method Dialog */}
+        <ProcessingMethodDialog
+          open={showProcessingDialog}
+          onOpenChange={setShowProcessingDialog}
+          fileName={selectedFile?.file.name}
+          onSelectMethod={handleProcessingMethodSelect}
+        />
       </CardContent>
     </Card>
   )

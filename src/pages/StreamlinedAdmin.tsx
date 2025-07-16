@@ -28,6 +28,7 @@ import { ErrorDialog } from '@/components/ui/error-dialog';
 import { useProcessingJobs } from '@/hooks/useProcessingJobs';
 import { SystemRepairPanel } from '@/components/admin/SystemRepairPanel';
 import { useQuery } from '@tanstack/react-query';
+import { BackendStatus } from '@/components/admin/BackendStatus';
 
 interface BasicStats {
   totalDocuments: number;
@@ -187,10 +188,13 @@ export default function StreamlinedAdmin() {
               Streamlined document management and system monitoring
             </p>
           </div>
-          <Button variant="outline" onClick={() => { refreshJobs(); refetchStats(); }}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-3">
+            <BackendStatus />
+            <Button variant="outline" onClick={() => { refreshJobs(); refetchStats(); }}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {/* Essential Status Cards */}

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { pythonAPI } from "@/lib/python-api";
 
 interface SearchBarProps {
   onSearch: (query: string, isLoading: boolean, answer: string | null, sources: any[], error: string | null) => void;
@@ -29,31 +30,47 @@ export function SearchBar({ onSearch }: SearchBarProps) {
     onSearch(query, true, null, [], null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('semantic-search', {
-        body: { query: query.trim() }
-      });
+      // Try Python backend first
+      const results = await pythonAPI.searchDocuments(query.trim(), 10, 0.7);
+      
+      // Transform Python backend results to match expected format
+      const transformedSources = results.results.map(result => ({
+        content: result.content,
+        metadata: result.metadata,
+        similarity: result.similarity
+      }));
 
-      if (error) {
-        console.error('Search error:', error);
-        onSearch(query, false, null, [], 'Failed to perform search. Please try again.');
+      // Generate answer using the results (simplified for now)
+      const answer = results.count > 0 
+        ? `Found ${results.count} relevant documents. Here are the most relevant excerpts from Massachusetts criminal law.`
+        : "No relevant documents found for your query.";
+
+      onSearch(query, false, answer, transformedSources, null);
+      
+    } catch (pythonError) {
+      console.warn('Python backend search failed, falling back to Supabase:', pythonError);
+      
+      // Fallback to Supabase edge function
+      try {
+        const { data, error } = await supabase.functions.invoke('semantic-search', {
+          body: { query: query.trim() }
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        onSearch(query, false, data.answer, data.sources || [], null);
+        
+      } catch (supabaseError) {
+        console.error('Both search methods failed:', supabaseError);
+        onSearch(query, false, null, [], 'Search failed. Please try again.');
         toast({
           title: "Search Error",
-          description: "There was an error performing your search. Please try again.",
+          description: "Search services are unavailable. Please try again later.",
           variant: "destructive",
         });
-        return;
       }
-
-      onSearch(query, false, data.answer, data.sources || [], null);
-      
-    } catch (error) {
-      console.error('Search error:', error);
-      onSearch(query, false, null, [], 'An unexpected error occurred. Please try again.');
-      toast({
-        title: "Search Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      });
     } finally {
       setIsLoading(false);
     }
