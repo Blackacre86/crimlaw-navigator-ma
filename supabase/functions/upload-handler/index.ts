@@ -101,13 +101,27 @@ serve(async (req) => {
       const existing = duplicateCheck[0];
       console.log(`Duplicate document detected: ${existing.document_title} (ID: ${existing.document_id})`);
       
+      // Check the processing status of the existing document
+      const { data: docStatus, error: statusError } = await supabase
+        .from('documents')
+        .select('ingestion_status, processing_completed_at, chunked')
+        .eq('id', existing.document_id)
+        .single();
+
+      const isProcessed = docStatus && (docStatus.ingestion_status === 'completed' || docStatus.chunked);
+      
       return new Response(JSON.stringify({ 
-        error: 'Document already exists',
-        message: `A document with the same content already exists: "${existing.document_title}"`,
+        success: true,
+        duplicate: true,
+        message: isProcessed 
+          ? `Document "${existing.document_title}" is already uploaded and processed.`
+          : `Document "${existing.document_title}" is already uploaded and being processed.`,
         existing_document_id: existing.document_id,
-        existing_document_title: existing.document_title
+        existing_document_title: existing.document_title,
+        processing_status: docStatus?.ingestion_status || 'unknown',
+        is_processed: isProcessed
       }), {
-        status: 409, // Conflict status
+        status: 200, // Success status instead of conflict
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }

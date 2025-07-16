@@ -6,7 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Upload, FileText, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useNotifications } from '@/hooks/use-notifications';
 
 interface UploadedFile {
   id: string;
@@ -18,16 +18,15 @@ interface UploadedFile {
 
 export function SimpleDocumentUploader() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
-  const { toast } = useToast();
+  const { success, error, warning } = useNotifications();
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     for (const file of acceptedFiles) {
       if (file.type !== 'application/pdf') {
-        toast({
-          title: "Invalid file type",
-          description: "Only PDF files are supported.",
-          variant: "destructive"
-        });
+        error(
+          "Invalid file type",
+          "Only PDF files are supported."
+        );
         continue;
       }
 
@@ -42,59 +41,66 @@ export function SimpleDocumentUploader() {
       setFiles(prev => [...prev, uploadedFile]);
 
       try {
-        // Upload to storage
         updateFileStatus(fileId, 'uploading', 25);
         
+        // Create form data for the upload
+        const formData = new FormData();
+        formData.append('file', file);
+        
         const { data: uploadData, error: uploadError } = await supabase.functions.invoke('upload-handler', {
-          body: file
+          body: formData
         });
 
         if (uploadError) throw uploadError;
 
-        updateFileStatus(fileId, 'processing', 50);
-
-        // Create document record
-        const { data: docData, error: docError } = await supabase
-          .from('documents')
-          .insert({
-            title: file.name.replace('.pdf', ''),
-            category: 'legal',
-            file_path: uploadData.filePath,
-            ingestion_status: 'pending'
-          })
-          .select()
-          .single();
-
-        if (docError) throw docError;
+        // Handle duplicate detection
+        if (uploadData.duplicate) {
+          updateFileStatus(fileId, 'completed', 100);
+          success(
+            "Document already exists",
+            uploadData.message,
+            {
+              details: `Document ID: ${uploadData.existing_document_id}\nStatus: ${uploadData.processing_status}`,
+              action: uploadData.is_processed ? undefined : {
+                label: "Check Status",
+                onClick: () => window.location.reload()
+              }
+            }
+          );
+          return;
+        }
 
         updateFileStatus(fileId, 'processing', 75);
-
-        // Start processing (silent background operation)
-        supabase.functions.invoke('process-document', {
-          body: { documentId: docData.id }
-        }).then(() => {
-          updateFileStatus(fileId, 'completed', 100);
-        }).catch((error) => {
-          updateFileStatus(fileId, 'failed', 100, error.message);
-        });
-
         updateFileStatus(fileId, 'completed', 100);
 
-        toast({
-          title: "Upload successful",
-          description: `${file.name} has been uploaded and is being processed in the background.`
-        });
+        success(
+          "Upload successful",
+          `${file.name} has been uploaded and is being processed in the background.`,
+          {
+            details: `Document ID: ${uploadData.document_id}\nProcessing Job ID: ${uploadData.processing_job_id}`
+          }
+        );
 
-      } catch (error: any) {
-        updateFileStatus(fileId, 'failed', 100, error.message);
-        toast({
-          title: "Upload failed",
-          description: error.message,
-          variant: "destructive"
-        });
+      } catch (err: any) {
+        updateFileStatus(fileId, 'failed', 100, err.message);
+        
+        const errorMessage = err.message || 'Unknown error occurred';
+        const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network');
+        
+        error(
+          "Upload failed", 
+          isNetworkError ? "Network error - please check your connection" : errorMessage,
+          {
+            details: `File: ${file.name}\nSize: ${(file.size / 1024 / 1024).toFixed(2)}MB\nError: ${errorMessage}`,
+            action: {
+              label: "Retry",
+              onClick: () => onDrop([file])
+            }
+          }
+        );
       }
     }
-  }, [toast]);
+  }, [success, error]);
 
   const updateFileStatus = (id: string, status: UploadedFile['status'], progress: number, error?: string) => {
     setFiles(prev => prev.map(file => 
