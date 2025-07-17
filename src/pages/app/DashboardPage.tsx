@@ -8,7 +8,7 @@ import { SearchBar } from '@/components/SearchBar';
 import { SearchResults } from '@/components/SearchResults';
 import { SearchResultCard, SearchResult } from '@/components/SearchResultCard';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
-import { OnboardingWelcome } from '@/components/OnboardingWelcome';
+import { OnboardingModal } from '@/components/OnboardingModal';
 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +17,9 @@ export default function DashboardPage() {
     toast
   } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return !localStorage.getItem('lexinnova-onboarding-complete');
+  });
   const [searchState, setSearchState] = useState({
     query: '',
     isLoading: false,
@@ -105,7 +108,10 @@ export default function DashboardPage() {
   return <div className="h-full" style={{
     background: 'var(--gradient-subtle)'
   }}>
-      <OnboardingWelcome />
+      <OnboardingModal 
+        isOpen={showOnboarding} 
+        onClose={() => setShowOnboarding(false)} 
+      />
       
       {/* Header */}
       <div className="border-b border-border" style={{

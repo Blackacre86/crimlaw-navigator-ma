@@ -7,7 +7,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Public pages
-import LandingPage from "./pages/public/LandingPage";
+import Index from "./pages/Index";
 import PricingPage from "./pages/public/PricingPage";
 import TermsOfServicePage from "./pages/public/TermsOfServicePage";
 import PrivacyPolicyPage from "./pages/public/PrivacyPolicyPage";
@@ -36,7 +36,7 @@ const App = () => (
             <BrowserRouter>
             <Routes>
               {/* Public Routes */}
-              <Route path="/" element={<LandingPage />} />
+              <Route path="/" element={<Index />} />
               <Route path="/pricing" element={<PricingPage />} />
               <Route path="/terms-of-service" element={<TermsOfServicePage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
