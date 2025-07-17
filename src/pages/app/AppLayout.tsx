@@ -99,7 +99,7 @@ export default function AppLayout() {
                   <Badge variant="secondary" className="ml-auto text-xs">Admin</Badge>
                 </NavLink>
                 <NavLink
-                  to="/admin"
+                  to="/admin/documents"
                   className={({ isActive }) =>
                     `flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
                       isActive
@@ -130,7 +130,7 @@ export default function AppLayout() {
                   <BarChart3 className="h-5 w-5" />
                 </NavLink>
                 <NavLink
-                  to="/admin"
+                  to="/admin/documents"
                   className={({ isActive }) =>
                     `flex items-center justify-center px-3 py-2 rounded-lg transition-colors ${
                       isActive

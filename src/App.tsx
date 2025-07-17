@@ -21,6 +21,7 @@ import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import AppLayout from "./pages/app/AppLayout";
 import DashboardPage from "./pages/app/DashboardPage";
 import Profile from "./pages/Profile";
+import AdminDashboard from "./pages/admin/AdminDashboard";
 import StreamlinedAdmin from "./pages/StreamlinedAdmin";
 import NotFound from "./pages/NotFound";
 
@@ -63,7 +64,31 @@ const App = () => (
                 path="/admin" 
                 element={
                   <ProtectedRoute adminOnly>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/dashboard" 
+                element={
+                  <ProtectedRoute adminOnly>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/documents" 
+                element={
+                  <ProtectedRoute adminOnly>
                     <StreamlinedAdmin />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/users" 
+                element={
+                  <ProtectedRoute adminOnly>
+                    <AdminDashboard />
                   </ProtectedRoute>
                 } 
               />
