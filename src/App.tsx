@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -31,8 +32,9 @@ const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <NotificationProvider>
+        <ThemeProvider defaultTheme="dark" storageKey="shift-ui-theme">
+          <AuthProvider>
+            <NotificationProvider>
             <BrowserRouter>
             <Routes>
               {/* Public Routes */}
@@ -99,12 +101,13 @@ const App = () => (
               {/* 404 Catch-all */}
               <Route path="*" element={<NotFound />} />
             </Routes>
-          </BrowserRouter>
+            </BrowserRouter>
           </NotificationProvider>
         </AuthProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </ErrorBoundary>
+      </ThemeProvider>
+    </TooltipProvider>
+  </QueryClientProvider>
+</ErrorBoundary>
 );
 
 export default App;

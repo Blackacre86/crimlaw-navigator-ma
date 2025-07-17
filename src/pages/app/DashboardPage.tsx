@@ -8,6 +8,8 @@ import { VoiceSearchButton } from '@/components/VoiceSearchButton';
 import { SearchResultCard, SearchResult } from '@/components/SearchResultCard';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { OnboardingModal } from '@/components/OnboardingModal';
+import { VisionBanner } from '@/components/VisionBanner';
+import { FieldEchoMode } from '@/components/FieldEchoMode';
 import { useToast } from '@/hooks/use-toast';
 
 export default function DashboardPage() {
@@ -68,6 +70,9 @@ export default function DashboardPage() {
         onClose={() => setShowOnboarding(false)} 
       />
       
+{/* Vision Banner */}
+      <VisionBanner />
+
       {/* Header */}
       <div className="border-b border-border bg-gradient-hero text-white">
         <div className="p-6">
@@ -94,9 +99,7 @@ export default function DashboardPage() {
             
             {/* Voice and Search Options */}
             <div className="space-y-4">
-              <div className="text-center">
-                <VoiceSearchButton onSearch={handleSearch} />
-              </div>
+              <FieldEchoMode onSearch={handleSearch} responseText={searchState.answer || ''} />
               <div className="text-center text-sm text-muted-foreground">or search with text</div>
               <SearchBar onSearch={handleSearch} />
               
