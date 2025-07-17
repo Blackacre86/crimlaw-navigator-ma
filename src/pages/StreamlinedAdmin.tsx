@@ -14,12 +14,7 @@ import {
   FileText, 
   CheckCircle, 
   AlertCircle, 
-  Eye, 
-  RefreshCw,
-  Database,
-  Clock,
-  Activity,
-  AlertTriangle
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -28,14 +23,12 @@ import { ErrorDialog } from '@/components/ui/error-dialog';
 import { useProcessingJobs } from '@/hooks/useProcessingJobs';
 import { SystemRepairPanel } from '@/components/admin/SystemRepairPanel';
 import { useQuery } from '@tanstack/react-query';
-import { BackendStatus } from '@/components/admin/BackendStatus';
 
 interface BasicStats {
   totalDocuments: number;
   processingDocuments: number;
   completedDocuments: number;
   failedDocuments: number;
-  queuedJobs: number;
 }
 
 export default function StreamlinedAdmin() {
@@ -46,26 +39,19 @@ export default function StreamlinedAdmin() {
   const [progress, setProgress] = useState(0);
   const { toast } = useToast();
   const { showError, selectedError, setSelectedError } = useErrorHandling();
-  const { jobs, loading: jobsLoading, refreshJobs, stats } = useProcessingJobs();
+  const { jobs, loading: jobsLoading, refreshJobs } = useProcessingJobs();
 
   // Simple stats query - only what we need
-  const { data: basicStats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
+  const { data: basicStats, refetch: refetchStats } = useQuery({
     queryKey: ['basic-admin-stats'],
     queryFn: async (): Promise<BasicStats> => {
-      const [documentsRes, jobsRes] = await Promise.all([
-        supabase.from('documents').select('id, ingestion_status'),
-        supabase.from('processing_jobs').select('id, status')
-      ]);
-
-      const documents = documentsRes.data || [];
-      const jobs = jobsRes.data || [];
+      const { data: documents } = await supabase.from('documents').select('id, ingestion_status');
 
       return {
-        totalDocuments: documents.length,
-        processingDocuments: documents.filter(d => d.ingestion_status === 'processing').length,
-        completedDocuments: documents.filter(d => d.ingestion_status === 'completed').length,
-        failedDocuments: documents.filter(d => d.ingestion_status === 'failed').length,
-        queuedJobs: jobs.filter(j => j.status === 'queued').length,
+        totalDocuments: documents?.length || 0,
+        processingDocuments: documents?.filter(d => d.ingestion_status === 'processing').length || 0,
+        completedDocuments: documents?.filter(d => d.ingestion_status === 'completed').length || 0,
+        failedDocuments: documents?.filter(d => d.ingestion_status === 'failed').length || 0,
       };
     },
     refetchInterval: 10000, // Reduced frequency
@@ -177,19 +163,18 @@ export default function StreamlinedAdmin() {
   }
 
   return (
-    <div className="min-h-screen p-6" style={{ background: 'var(--gradient-background)' }}>
+    <div className="min-h-screen p-6">
       <div className="max-w-6xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              Admin Dashboard
+              Document Management
             </h1>
             <p className="text-muted-foreground">
-              Streamlined document management and system monitoring
+              Upload and manage legal documents
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <BackendStatus />
             <Button variant="outline" onClick={() => { refreshJobs(); refetchStats(); }}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
@@ -198,7 +183,7 @@ export default function StreamlinedAdmin() {
         </div>
 
         {/* Essential Status Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">Total Documents</CardTitle>
@@ -213,7 +198,7 @@ export default function StreamlinedAdmin() {
               <CardTitle className="text-sm">Processing</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{basicStats?.processingDocuments || 0}</div>
+              <div className="text-2xl font-bold text-primary">{basicStats?.processingDocuments || 0}</div>
             </CardContent>
           </Card>
           
@@ -222,7 +207,7 @@ export default function StreamlinedAdmin() {
               <CardTitle className="text-sm">Completed</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{basicStats?.completedDocuments || 0}</div>
+              <div className="text-2xl font-bold text-accent-blue">{basicStats?.completedDocuments || 0}</div>
             </CardContent>
           </Card>
           
@@ -231,25 +216,15 @@ export default function StreamlinedAdmin() {
               <CardTitle className="text-sm">Failed</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{basicStats?.failedDocuments || 0}</div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Queue</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{basicStats?.queuedJobs || 0}</div>
+              <div className="text-2xl font-bold text-destructive">{basicStats?.failedDocuments || 0}</div>
             </CardContent>
           </Card>
         </div>
 
         <Tabs defaultValue="upload" className="space-y-6">
-          <TabsList className="grid grid-cols-3 w-full max-w-md">
+          <TabsList className="grid grid-cols-2 w-full max-w-md">
             <TabsTrigger value="upload">Upload</TabsTrigger>
             <TabsTrigger value="status">Status</TabsTrigger>
-            <TabsTrigger value="repair">Repair</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload">
@@ -260,7 +235,7 @@ export default function StreamlinedAdmin() {
                   Upload Document
                 </CardTitle>
                 <CardDescription>
-                  Upload PDF documents to process and add to the searchable database
+                  Upload PDF documents to add to the searchable database
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -317,8 +292,8 @@ export default function StreamlinedAdmin() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-5 w-5" />
-                  Processing Status
+                  <FileText className="h-5 w-5" />
+                  Document Status
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -352,7 +327,7 @@ export default function StreamlinedAdmin() {
                       ))}
                       {jobs.length === 0 && (
                         <p className="text-center text-muted-foreground py-8">
-                          No processing jobs found
+                          No documents found
                         </p>
                       )}
                     </div>
@@ -360,10 +335,6 @@ export default function StreamlinedAdmin() {
                 </ScrollArea>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="repair">
-            <SystemRepairPanel />
           </TabsContent>
         </Tabs>
 

@@ -2,28 +2,22 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { 
   Scale, 
   Search, 
-  FileText, 
-  History, 
   User, 
-  Settings, 
   LogOut,
   ChevronLeft,
   ChevronRight,
-  MessageSquare,
-  Sparkles,
-  BarChart3
+  BarChart3,
+  FileText,
+  Settings
 } from 'lucide-react';
 
 export default function AppLayout() {
   const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [aiPanelCollapsed, setAiPanelCollapsed] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
@@ -62,7 +56,6 @@ export default function AppLayout() {
               {!sidebarCollapsed && <span>Legal Research</span>}
             </NavLink>
 
-
             <NavLink
               to="/app/profile"
               className={({ isActive }) =>
@@ -95,8 +88,7 @@ export default function AppLayout() {
                   }
                 >
                   <BarChart3 className="h-5 w-5" />
-                  <span>Analytics Dashboard</span>
-                  <Badge variant="secondary" className="ml-auto text-xs">Admin</Badge>
+                  <span>Analytics</span>
                 </NavLink>
                 <NavLink
                   to="/admin/documents"
@@ -108,8 +100,8 @@ export default function AppLayout() {
                     }`
                   }
                 >
-                  <Settings className="h-5 w-5" />
-                  <span>Document Management</span>
+                  <FileText className="h-5 w-5" />
+                  <span>Documents</span>
                 </NavLink>
               </div>
             )}
@@ -140,7 +132,7 @@ export default function AppLayout() {
                   }
                   title="Document Management"
                 >
-                  <Settings className="h-5 w-5" />
+                  <FileText className="h-5 w-5" />
                 </NavLink>
               </div>
             )}
@@ -181,73 +173,10 @@ export default function AppLayout() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex">
-        {/* Center Panel - Main Workspace */}
-        <div className={`${aiPanelCollapsed ? 'flex-1' : 'flex-1 mr-80'} transition-all duration-300`}>
-          <main className="h-full overflow-auto">
-            <Outlet />
-          </main>
-        </div>
-
-        {/* Right Panel - AI Co-Pilot */}
-        <div className={`${aiPanelCollapsed ? 'w-12' : 'w-80'} border-l border-border transition-all duration-300 fixed right-0 top-0 h-full z-10 bg-gradient-card`}>
-          {aiPanelCollapsed ? (
-            <div className="p-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setAiPanelCollapsed(false)}
-                className="w-full"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <div className="h-full flex flex-col">
-              {/* AI Panel Header */}
-              <div className="p-4 border-b border-border">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Sparkles className="h-5 w-5 text-accent-blue" />
-                    <span className="font-semibold">AI Co-Pilot</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAiPanelCollapsed(true)}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* AI Chat Area */}
-              <div className="flex-1 p-4 overflow-auto">
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center space-x-2">
-                      <MessageSquare className="h-4 w-4" />
-                      <span>Ready to assist</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">
-                    <p>
-                      Perform a search to see AI-generated answers with verifiable citations. 
-                      I can help you with follow-up questions and deeper analysis.
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* AI Input Area */}
-              <div className="p-4 border-t border-border">
-                <div className="text-xs text-muted-foreground text-center">
-                  AI responses will appear here after searches
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+      <div className="flex-1">
+        <main className="h-full overflow-auto">
+          <Outlet />
+        </main>
       </div>
     </div>
   );
