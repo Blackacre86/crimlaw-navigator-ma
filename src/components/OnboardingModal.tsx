@@ -15,7 +15,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
   const [step, setStep] = useState(1);
 
   const handleComplete = () => {
-    localStorage.setItem('lexinnova-onboarding-complete', 'true');
+    localStorage.setItem('shift-onboarding-complete', 'true');
     onClose();
   };
 
@@ -34,7 +34,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
           <div className="flex items-center gap-3 mb-2">
             <Scale className="h-8 w-8 text-primary" />
             <div>
-              <DialogTitle className="text-2xl font-bold">Welcome to LexInnova</DialogTitle>
+              <DialogTitle className="text-2xl font-bold">Welcome to SHIFT</DialogTitle>
               <DialogDescription className="text-base">
                 AI-Powered Massachusetts Criminal Law Research Platform
               </DialogDescription>
@@ -51,9 +51,9 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                 </div>
                 <h3 className="text-xl font-semibold">Our Mission</h3>
                 <p className="text-muted-foreground max-w-lg mx-auto">
-                  LexInnova disrupts outdated law enforcement training by providing instant, accurate access to 
-                  Massachusetts criminal law through cutting-edge AI technology. We empower officers with 
-                  real-time legal insights for faster, fairer justice.
+                  SHIFT transforms law enforcement research with voice-enabled Massachusetts criminal law access. 
+                  Our platform provides instant, hands-free legal information for officers, detectives, and prosecutors. 
+                  Get verified legal answers through voice commands and traditional search.
                 </p>
               </div>
               
@@ -125,7 +125,7 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({ isOpen, onClos
                         Important Legal Disclaimer
                       </h4>
                       <p className="text-sm text-amber-700 dark:text-amber-300 mb-4">
-                        LexInnova provides research tools based on Massachusetts criminal law documents. 
+                        SHIFT provides voice-enabled research tools based on Massachusetts criminal law documents. 
                         This platform is not a substitute for professional legal advice. The AI-generated 
                         summaries and search results should be verified against official sources.
                       </p>

@@ -34,7 +34,7 @@ export default function AppLayout() {
         <div className="p-4 border-b border-sidebar-border">
           <div className="flex items-center space-x-2">
             <Scale className="h-8 w-8 text-primary" />
-            {!sidebarCollapsed && <span className="text-xl font-bold text-sidebar-foreground">LexInnova</span>}
+            {!sidebarCollapsed && <span className="text-xl font-bold text-sidebar-foreground">SHIFT</span>}
           </div>
         </div>
 

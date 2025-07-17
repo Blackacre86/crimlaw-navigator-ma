@@ -18,7 +18,7 @@ const Index = () => {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Scale className="h-8 w-8 text-primary" />
-            <span className="text-xl font-bold text-primary">LexInnova</span>
+            <span className="text-xl font-bold text-primary">SHIFT</span>
           </div>
           <nav className="hidden md:flex items-center space-x-6">
             <Link to="/pricing" className="text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>

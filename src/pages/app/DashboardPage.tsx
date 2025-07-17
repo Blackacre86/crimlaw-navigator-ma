@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Search, FileText, Gavel, BookOpen, Loader2, AlertCircle, Upload } from 'lucide-react';
 import { SearchBar } from '@/components/SearchBar';
+import { VoiceSearchButton } from '@/components/VoiceSearchButton';
 import { SearchResultCard, SearchResult } from '@/components/SearchResultCard';
 import { DocumentUploadModal } from '@/components/DocumentUploadModal';
 import { OnboardingModal } from '@/components/OnboardingModal';
@@ -12,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function DashboardPage() {
   const { toast } = useToast();
   const [showOnboarding, setShowOnboarding] = useState(() => {
-    return !localStorage.getItem('lexinnova-onboarding-complete');
+    return !localStorage.getItem('shift-onboarding-complete');
   });
   const [searchState, setSearchState] = useState({
     query: '',
@@ -70,9 +71,9 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="border-b border-border bg-gradient-hero text-white">
         <div className="p-6">
-          <h1 className="text-2xl font-bold mb-2">Massachusetts Criminal Law Research</h1>
+          <h1 className="text-2xl font-bold mb-2">SHIFT - Law Enforcement Research</h1>
           <p className="text-white/80">
-            Search legal information with AI-powered insights and verifiable citations
+            Voice-enabled Massachusetts criminal law research for officers, detectives, and prosecutors
           </p>
         </div>
       </div>
@@ -84,15 +85,19 @@ export default function DashboardPage() {
           <div className="text-center space-y-6">
             <div className="space-y-3">
               <h2 className="text-3xl font-bold text-foreground">
-                Legal Research for Massachusetts Criminal Law
+                Voice-Enabled Legal Research
               </h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Get instant, accurate answers from verified legal sources with citations.
+                Ask questions with your voice or text. Get instant answers from Massachusetts criminal law.
               </p>
             </div>
             
-            {/* Search Bar with Upload */}
+            {/* Voice and Search Options */}
             <div className="space-y-4">
+              <div className="text-center">
+                <VoiceSearchButton onSearch={handleSearch} />
+              </div>
+              <div className="text-center text-sm text-muted-foreground">or search with text</div>
               <SearchBar onSearch={handleSearch} />
               
               <div className="flex justify-center">
@@ -241,7 +246,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="text-sm">
             <p>
-              LexInnova provides access to Massachusetts criminal law research materials for informational purposes only. 
+              SHIFT provides access to Massachusetts criminal law research materials for informational purposes only. 
               The information provided does not constitute legal advice and should not be relied upon as such. 
               Always consult with qualified legal counsel for specific cases.
             </p>
