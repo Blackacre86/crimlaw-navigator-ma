@@ -47,7 +47,8 @@ export function SearchBar({ onSearch }: SearchBarProps) {
       }
 
       console.log('✅ Search successful:', data);
-      onSearch(query, false, data.answer || 'No answer generated', data.sources || [], null);
+      const sources = Array.isArray(data.sources) ? data.sources : [];
+      onSearch(query, false, data.answer || 'No answer generated', sources, null);
       
     } catch (searchError) {
       console.error('❌ Primary search failed:', searchError);
@@ -57,11 +58,11 @@ export function SearchBar({ onSearch }: SearchBarProps) {
         console.log('🔄 Trying Python backend fallback...');
         const results = await pythonAPI.searchDocuments(query.trim(), 10, 0.7);
         
-        const transformedSources = results.results.map(result => ({
-          content: result.content,
-          metadata: result.metadata,
-          similarity: result.similarity
-        }));
+        const transformedSources = Array.isArray(results.results) ? results.results.map(result => ({
+          content: result.content || '',
+          metadata: result.metadata || {},
+          similarity: result.similarity || 0
+        })) : [];
 
         const answer = results.count > 0 
           ? `Found ${results.count} relevant documents from Massachusetts criminal law.`

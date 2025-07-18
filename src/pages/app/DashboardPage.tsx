@@ -30,7 +30,7 @@ export default function DashboardPage() {
       query,
       isLoading,
       answer,
-      sources,
+      sources: Array.isArray(sources) ? sources : [],
       error
     });
   };
@@ -169,7 +169,7 @@ export default function DashboardPage() {
                   </div>
                 </CardContent>
               </Card>
-            ) : searchState.sources?.length > 0 ? (
+            ) : searchState.sources && searchState.sources.length > 0 ? (
               <div className="space-y-6">
                 {/* AI Summary */}
                 {searchState.answer && (
@@ -191,17 +191,17 @@ export default function DashboardPage() {
                 <div>
                   <h3 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
                     <FileText className="h-5 w-5" />
-                    Source Documents ({searchState.sources.length})
+                    Source Documents ({searchState.sources?.length || 0})
                   </h3>
-                  <div className="space-y-4">
-                    {searchState.sources.map((source, index) => (
-                      <SearchResultCard 
-                        key={index} 
-                        result={source as SearchResult} 
-                        index={index} 
-                      />
-                    ))}
-                  </div>
+                   <div className="space-y-4">
+                     {(searchState.sources || []).map((source, index) => (
+                       <SearchResultCard 
+                         key={index} 
+                         result={source as SearchResult} 
+                         index={index} 
+                       />
+                     ))}
+                   </div>
                 </div>
 
                 {/* Legal Disclaimer */}
