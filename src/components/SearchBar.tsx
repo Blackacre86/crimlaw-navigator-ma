@@ -30,44 +30,58 @@ export function SearchBar({ onSearch }: SearchBarProps) {
     onSearch(query, true, null, [], null);
 
     try {
-      // Try Python backend first
-      const results = await pythonAPI.searchDocuments(query.trim(), 10, 0.7);
+      console.log('🔍 Starting search for:', query.trim());
       
-      // Transform Python backend results to match expected format
-      const transformedSources = results.results.map(result => ({
-        content: result.content,
-        metadata: result.metadata,
-        similarity: result.similarity
-      }));
+      // Primary search: Use Supabase semantic-search function
+      const { data, error } = await supabase.functions.invoke('semantic-search', {
+        body: { query: query.trim() }
+      });
 
-      // Generate answer using the results (simplified for now)
-      const answer = results.count > 0 
-        ? `Found ${results.count} relevant documents. Here are the most relevant excerpts from Massachusetts criminal law.`
-        : "No relevant documents found for your query.";
+      if (error) {
+        console.error('❌ Semantic search error:', error);
+        throw new Error(`Semantic search failed: ${error.message}`);
+      }
 
-      onSearch(query, false, answer, transformedSources, null);
+      if (!data) {
+        throw new Error('No data returned from semantic search');
+      }
+
+      console.log('✅ Search successful:', data);
+      onSearch(query, false, data.answer || 'No answer generated', data.sources || [], null);
       
-    } catch (pythonError) {
-      console.warn('Python backend search failed, falling back to Supabase:', pythonError);
+    } catch (searchError) {
+      console.error('❌ Primary search failed:', searchError);
       
-      // Fallback to Supabase edge function
+      // Fallback: Try Python backend
       try {
-        const { data, error } = await supabase.functions.invoke('semantic-search', {
-          body: { query: query.trim() }
-        });
-
-        if (error) {
-          throw error;
-        }
-
-        onSearch(query, false, data.answer, data.sources || [], null);
+        console.log('🔄 Trying Python backend fallback...');
+        const results = await pythonAPI.searchDocuments(query.trim(), 10, 0.7);
         
-      } catch (supabaseError) {
-        console.error('Both search methods failed:', supabaseError);
-        onSearch(query, false, null, [], 'Search failed. Please try again.');
+        const transformedSources = results.results.map(result => ({
+          content: result.content,
+          metadata: result.metadata,
+          similarity: result.similarity
+        }));
+
+        const answer = results.count > 0 
+          ? `Found ${results.count} relevant documents from Massachusetts criminal law.`
+          : "No relevant documents found for your query.";
+
+        console.log('✅ Python backend fallback successful');
+        onSearch(query, false, answer, transformedSources, null);
+        
+      } catch (fallbackError) {
+        console.error('❌ All search methods failed:', { searchError, fallbackError });
+        
+        // Final fallback: Show helpful error message
+        const errorMessage = searchError.message.includes('semantic search') 
+          ? 'Search service is temporarily unavailable. Please try again in a moment.'
+          : 'Unable to process your search. Please check your connection and try again.';
+          
+        onSearch(query, false, null, [], errorMessage);
         toast({
-          title: "Search Error",
-          description: "Search services are unavailable. Please try again later.",
+          title: "Search Temporarily Unavailable",
+          description: errorMessage,
           variant: "destructive",
         });
       }
