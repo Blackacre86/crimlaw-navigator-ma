@@ -10,9 +10,7 @@ import { Link } from 'react-router-dom';
 // Hero section for the Massachusetts Criminal Law Research Platform
 const Index = () => {
   const [email, setEmail] = useState('');
-
-  return (
-    <div className="min-h-screen bg-background">
+  return <div className="min-h-screen bg-background">
       {/* Navigation */}
       <header className="border-b border-border sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -31,13 +29,13 @@ const Index = () => {
       </header>
 
       {/* Hero Section */}
-      <section className="py-24 px-4" style={{ background: 'var(--gradient-hero)' }}>
+      <section className="py-24 px-4" style={{
+      background: 'var(--gradient-hero)'
+    }}>
         <div className="container mx-auto max-w-6xl text-center">
           <div className="space-y-8">
             <div className="space-y-4">
-              <Badge variant="outline" className="px-3 py-1 text-sm">
-                🚀 Revolutionary Legal Research Platform
-              </Badge>
+              
               <h1 className="text-4xl md:text-6xl font-bold text-foreground leading-tight">
                 AI-Powered{' '}
                 <span className="text-primary">Massachusetts</span>{' '}
@@ -249,8 +247,6 @@ const Index = () => {
           </div>
         </div>
       </footer>
-    </div>
-  );
+    </div>;
 };
-
 export default Index;
